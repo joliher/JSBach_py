@@ -7,16 +7,18 @@ import sys
 import json
 import platform
 
-# Códigos ANSI
+###############
+#   Colores   #
+###############
 BLUE = "\033[94m"
 YELLOW = "\033[93m"
 RED = "\033[91m"
 GREEN = "\033[92m"
 RESET = "\033[0m"
 
-# -----------------------------
-# Helper functions
-# -----------------------------
+###########
+#   QOL   #
+###########
 
 def run(cmd):
     """Run a command and show it."""
@@ -62,10 +64,9 @@ def ensure_root():
         print(f"{RED}[ERROR] {RESET}Debes ejecutar este script como root.")
         sys.exit(1)
 
-# -----------------------------
-# Installation steps
-# -----------------------------
-
+####################
+#   Dependencias   #
+####################
 def install_dependencies():
     print("\n=== Instalando dependencias del sistema ===\n")
 
@@ -84,17 +85,18 @@ def install_dependencies():
             sys.exit(result.returncode)
 
 
+###################
+#   Instalación   #
+###################
 def prepare_directory(target_path):
     print("\n=== Preparando directorio del proyecto ===\n")
 
-    # Ruta real del script (no el cwd)
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
     if not os.path.exists(target_path):
         print(f"{BLUE}[INFO] {RESET}Creando directorio {target_path}")
         os.makedirs(target_path)
 
-    # Copiar backend
     backend_src = os.path.join(BASE_DIR, "..", "backend.py")
     backend_dst = os.path.join(target_path, "backend.py")
 
@@ -104,7 +106,6 @@ def prepare_directory(target_path):
     else:
         print(f"{YELLOW}[WARN] {RESET}backend.py no encontrado")
 
-    # Copiar estáticos
     static_src = os.path.join(BASE_DIR, "..", "static")
     static_dst = os.path.join(target_path, "static")
 
@@ -120,7 +121,6 @@ def create_venv(target_path):
     print("\n=== Configurando entorno virtual ===\n")
     venv_path = os.path.join(target_path, "venv")
 
-    # Crear venv sin mostrar output
     result = subprocess.run(f"python3 -m venv {venv_path}", shell=True,
                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     if result.returncode != 0:
@@ -128,7 +128,6 @@ def create_venv(target_path):
         print(result.stderr.strip())
         sys.exit(result.returncode)
 
-    # Instalar dependencias sin mostrar output
     result = subprocess.run(f"{venv_path}/bin/pip install fastapi uvicorn", shell=True,
                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     if result.returncode != 0:
@@ -162,7 +161,6 @@ WantedBy=multi-user.target
     with open(service_path, "w") as f:
         f.write(service_content)
 
-    # Comandos systemctl silenciosos
     systemctl_cmds = [
         "systemctl daemon-reload",
         "systemctl enable router-JSBach",
@@ -179,11 +177,10 @@ WantedBy=multi-user.target
 
     print(f"{GREEN}[OK]{RESET} Servicio systemd creado y en ejecución.")
 
-# -----------------------------
-# Main installer logic
-# -----------------------------
-
-def main():
+############
+#   MAIN   #
+############
+if __name__ == "__main__":
     # Detectar sistema operativo
     if platform.system() == "Windows":
         message = f"""
@@ -257,8 +254,4 @@ def main():
     print("\n=== Instalación completada con éxito ===\n")
     print(f"Proyecto instalado en: {BLUE}{target_path}")
     print(f"{RESET}Puedes iniciar tu backend con: {GREEN}systemctl start router-JSBach")
-
-
-if __name__ == "__main__":
-    main()
 
