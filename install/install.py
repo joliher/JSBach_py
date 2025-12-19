@@ -128,7 +128,7 @@ def create_venv(target_path):
         print(result.stderr.strip())
         sys.exit(result.returncode)
 
-    result = subprocess.run(f"{venv_path}/bin/pip install fastapi uvicorn", shell=True,
+    result = subprocess.run(f"{venv_path}/bin/pip install fastapi uvicorn jinja2", shell=True,
                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     if result.returncode != 0:
         print(f"{RED}[ERROR]{RESET} Falló al instalar paquetes en el entorno virtual.")
