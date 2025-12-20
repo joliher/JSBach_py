@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>WAN - Router</title>
+    <style>
+        html, body { margin: 0; height: 100%; font-family: Arial, sans-serif; }
+        .container { display: grid; grid-template-rows: 20% 80%; height: 100%; }
+        .top-frame { width: 100%; height: 100%; border: none; }
+        .bottom { display: grid; grid-template-columns: 25% 75%; height: 100%; }
+        .left-frame, .right-frame { width: 100%; height: 100%; border: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Cabecera propia o reutilizada -->
+        <iframe src="/static/header.html" class="top-frame"></iframe>
+
+        <!-- Menú y contenido WAN -->
+        <div class="bottom">
+            <iframe src="/static/wan/status.html" class="left-frame" name="menu"></iframe>
+            <iframe src="/static/wan/info.html" class="right-frame" name="body"></iframe>
+        </div>
+    </div>
+</body>
+</html>
