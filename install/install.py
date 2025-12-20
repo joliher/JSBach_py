@@ -117,6 +117,16 @@ def prepare_directory(target_path):
     else:
         print(f"{YELLOW}[WARN] {RESET}No existe carpeta static/")
 
+    scripts_src = os.path.join(BASE_DIR, "..", "scripts")
+    scripts_dst = os.path.join(target_path, "scripts")
+    if os.path.exists(scripts_src):
+        print(f"{BLUE}[INFO]{RESET} Copiando carpeta scripts/")
+        if os.path.exists(scripts_dst):
+            shutil.rmtree(scripts_dst)
+        shutil.copytree(scripts_src, scripts_dst)
+    else:
+        print(f"{YELLOW}[WARN] {RESET}No existe carpeta scripts/")
+
 def create_venv(target_path):
     print("\n=== Configurando entorno virtual ===\n")
     venv_path = os.path.join(target_path, "venv")
@@ -229,6 +239,9 @@ if __name__ == "__main__":
 
     # Preguntar ruta de instalación
     target_path = ask("Ruta de instalación del proyecto", "/opt/JSBach")
+    if target_path == "/":
+        print(f"{YELLOW}[WARN]{RESET} Has elegido '/' como ruta de instalación. Esto puede sobreescribir archivos importantes del sistema.\n"
+              "Continúa bajo tu propio riesgo.")
 
     # Instalar dependencias
     install_dependencies()

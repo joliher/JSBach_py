@@ -4,57 +4,20 @@
   <meta charset="utf-8">
   <title>Header Router JSBach</title>
   <style type="text/css">
-    body {
-      font-family: Arial, sans-serif;
-      margin: 0;
-      padding: 0;
-      text-align: center;
-    }
-
-    h1 {
-      color: #2A5B45;
-      margin: 10px 0;
-    }
-
-    .home-icon {
-      position: absolute;
-      top: 12px;
-      left: 12px;
-      z-index: 1000;
-    }
-
-    .home-icon svg {
-      cursor: pointer;
-      transition: transform 0.15s ease-in-out;
-    }
-
-    .home-icon svg:hover {
-      transform: scale(1.1);
-    }
-
-    button {
-      background-color: #f0f0f0;
-      border: 1px solid #ccc;
-      padding: 10px 15px;
-      cursor: pointer;
-      margin: 5px;
-      font-size: 14px;
-    }
-
-    button.active {
-      background-color: #007bff;
-      color: white;
-      box-shadow: inset 0 4px 6px rgba(0, 0, 0, 0.1);
-      border: 1px solid #0056b3;
-      transform: translateY(2px);
-    }
+    body { font-family: Arial, sans-serif; margin: 0; padding: 0; text-align: center; }
+    h1 { color: #2A5B45; margin: 10px 0; }
+    .home-icon { position: absolute; top: 12px; left: 12px; z-index: 1000; }
+    .home-icon svg { cursor: pointer; transition: transform 0.15s ease-in-out; }
+    .home-icon svg:hover { transform: scale(1.1); }
+    button { background-color: #f0f0f0; border: 1px solid #ccc; padding: 10px 15px; cursor: pointer; margin: 5px; font-size: 14px; }
+    button.active { background-color: #007bff; color: white; box-shadow: inset 0 4px 6px rgba(0, 0, 0, 0.1); border: 1px solid #0056b3; transform: translateY(2px); }
   </style>
 </head>
 <body>
 
   <!-- ICONO HOME -->
   <div class="home-icon">
-    <a href="/static/index.html" target="_top" title="Volver al inicio">
+    <a href="/" target="_top" title="Volver al inicio">
       <svg width="56" height="56" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
         <path d="M8 30 L32 10 L56 30" fill="none" stroke="#2A5B45" stroke-width="4" stroke-linejoin="round"/>
         <rect x="14" y="30" width="36" height="26" fill="#f0f0f0" stroke="#2A5B45" stroke-width="4"/>
@@ -65,7 +28,6 @@
     </a>
   </div>
 
-  <!-- TÍTULO -->
   <h1>Administrando el Router <u>JSBach</u> con <u>FastAPI</u></h1>
 
   <!-- BOTONES -->
@@ -77,39 +39,23 @@
   </div>
 
   <script>
-    function cambiarVista(action) {
-      switch(action) {
-        case "wan":
-          window.top.location.href = '/wan/index.html';
-          break;
-        case "nat":
-          window.top.location.href = '/nat/index.html';
-          break;
-        case "bridge":
-          window.top.location.href = '/bridge/index.html';
-          break;
-        case "firewall":
-          window.top.location.href = '/firewall/index.html';
-          break;
-      }
-    }
+  function cambiarVista(action) {
+      window.top.location.href = '/' + action + '/';
+  }
 
-    // Marcar el botón activo según la URL actual
-    function marcarBotonActivo() {
-      const path = window.top.location.pathname; // Ruta completa
+  function marcarBotonActivo() {
+      const path = window.top.location.pathname;
       document.querySelectorAll("button").forEach(btn => {
-        const action = btn.getAttribute("data-action");
-        if (path.includes("/" + action + "/") || path.endsWith(action + "/index.html")) {
-          btn.classList.add("active");
-        } else {
-          btn.classList.remove("active");
-        }
+          const action = btn.getAttribute("data-action");
+          if (path.startsWith('/' + action + '/')) {
+              btn.classList.add("active");
+          } else {
+              btn.classList.remove("active");
+          }
       });
-    }
+  }
 
-    // Ejecutar al cargar la página
-    window.onload = marcarBotonActivo;
+  window.onload = marcarBotonActivo;
   </script>
-
 </body>
 </html>
