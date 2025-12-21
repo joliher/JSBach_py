@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>WAN - Info</title>
+<style>
+html, body { margin: 0; font-family: Arial, sans-serif; padding: 10px; }
+pre { white-space: pre-wrap; word-wrap: break-word; font-size: 14px; background: #f8f8f8; padding: 10px; border: 1px solid #ddd; }
+.error { color: red; }
+.success { color: green; }
+</style>
+</head>
+<body>
+
+<h3>Estado / Información WAN</h3>
+<pre id="output">Aquí se mostrará la información del estado de WAN.</pre>
+
+<script>
+// Función para ejecutar cualquier acción WAN y mostrar el resultado
+async function runWanAction(action) {
+    const output = document.getElementById("output");
+
+    try {
+        const resp = await fetch(`/run/wan.py?action=${action}`);
+        const data = await resp.json();
+
+        if (data.returncode === 0) {
+            output.textContent = data.stdout || "Acción realizada correctamente";
+            output.className = "success";
+        } else {
+            // Mostramos stderr si existe, sino un mensaje genérico
+            output.textContent = data.stderr || `Error desconocido (código ${data.returncode})`;
+            output.className = "error";
+        }
+    } catch (e) {
+        output.textContent = "Error al comunicarse con el backend: " + e;
+        output.className = "error";
+    }
+}
+
+// Ejemplo: si quieres que al cargar la página muestre el estado automáticamente
+// runWanAction('status');
+</script>
+
+</body>
+</html>

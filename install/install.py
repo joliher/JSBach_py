@@ -126,6 +126,17 @@ def prepare_directory(target_path):
         shutil.copytree(scripts_src, scripts_dst)
     else:
         print(f"{YELLOW}[WARN] {RESET}No existe carpeta scripts/")
+    
+    config_src = os.path.join(BASE_DIR, "..", "config")
+    config_dst = os.path.join(target_path, "config")
+    if os.path.exists(config_src):
+        print(f"{BLUE}[INFO]{RESET} Copiando carpeta config/")
+        if os.path.exists(config_dst):
+            shutil.rmtree(config_dst)
+        shutil.copytree(config_src, config_dst)
+    else:
+        print(f"{YELLOW}[WARN] {RESET}No existe carpeta config/")
+
 
 def create_venv(target_path):
     print("\n=== Configurando entorno virtual ===\n")

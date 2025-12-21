@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>WAN - Menú</title>
+<style>
+html, body { margin: 0; font-family: Arial, sans-serif; padding: 10px; }
+button { display: block; width: 100%; margin: 5px 0; padding: 8px 12px; cursor: pointer; border: 1px solid #ccc; background-color: #eee; }
+button.selected { background-color: #3399ff; color: white; border-color: #007acc; }
+</style>
+</head>
+<body>
+
+<h3>Acciones WAN</h3>
+
+<button id="btnStart" onclick="runWan('start', this)">IFWAN START</button>
+<button id="btnStop" onclick="runWan('stop', this)">IFWAN STOP</button>
+<button id="btnRestart" onclick="runWan('restart', this)">IFWAN RESTART</button>
+<button id="btnStatus" onclick="runWan('status', this)">IFWAN STATUS</button>
+<button id="btnConfig" onclick="runWan('config', this)">IFWAN CONFIG</button>
+
+<script>
+function runWan(action, btn) {
+    const iframe = parent.frames['body'];
+
+    // Actualizamos el color de los botones
+    const botones = document.querySelectorAll("button");
+    botones.forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+
+    if (action === "config") {
+        // Abrir formulario de configuración
+        iframe.location.href = "/wan/config.html";
+        return;
+    }
+
+    // Ejecutar script con la acción correspondiente
+    iframe.location.href = `/run/wan.py?action=${action}`;
+}
+
+// Ningún botón seleccionado por defecto al cargar
+</script>
+
+</body>
+</html>

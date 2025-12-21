@@ -1,0 +1,8 @@
+{
+    "mode": "manual",
+    "interface": "nigga1",
+    "ip": "10.0.0.10",
+    "mask": "24",
+    "gateway": "10.0.0.1",
+    "dns": "1.0.0.1"
+}
