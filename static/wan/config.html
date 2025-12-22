@@ -53,7 +53,25 @@ function setMode(m) {
         btnDHCP.classList.remove("selected");
         btnManual.classList.add("selected");
     }
+
+    // Guardamos modo en localStorage
+    localStorage.setItem("wanConfigMode", m);
 }
+
+// Al cargar la página, restauramos el modo y los campos
+window.addEventListener("DOMContentLoaded", () => {
+    const savedMode = localStorage.getItem("wanConfigMode");
+    if (savedMode) {
+        setMode(savedMode);
+    }
+
+    // Opcional: restaurar valores de los inputs si quieres persistencia completa
+    const fields = ["interface", "ip", "mask", "gateway", "dns"];
+    fields.forEach(id => {
+        const value = localStorage.getItem(id);
+        if (value) document.getElementById(id).value = value;
+    });
+});
 
 async function submitConfig(event) {
     event.preventDefault();
@@ -70,23 +88,21 @@ async function submitConfig(event) {
         params.append("dns", document.getElementById("dns").value);
     }
 
+    // Guardamos valores en localStorage
+    ["interface","ip","mask","gateway","dns"].forEach(id => {
+        localStorage.setItem(id, document.getElementById(id).value);
+    });
+
     const output = document.getElementById("output");
 
     try {
         const resp = await fetch(`/run/wan.py?${params.toString()}`);
-        const data = await resp.json();
-
-        if (data.returncode === 0) {
-            output.textContent = data.stdout || "Configuración guardada correctamente";
-        } else {
-            output.textContent = data.stderr || "Ocurrió un error al aplicar la configuración";
-        }
+        const data = await resp.text(); // si tu backend devuelve texto plano
+        output.textContent = data;
     } catch (e) {
         output.textContent = "Error al guardar la configuración: " + e;
     }
 }
-
-// Ningún modo seleccionado por defecto
 </script>
 
 </body>

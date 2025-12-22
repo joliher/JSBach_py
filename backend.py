@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 import subprocess
 import os
 
@@ -61,12 +61,17 @@ def run_script(script_name: str, request: Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error ejecutando el script: {str(e)}")
     
-    return JSONResponse({
-        "script": script_name,
-        "returncode": result.returncode,
-        "stdout": result.stdout,
-        "stderr": result.stderr
-    })
+    # Salida en texto plano
+    output = ""
+    if result.stdout:
+        output += result.stdout
+    if result.stderr:
+        output += result.stderr
+
+    return PlainTextResponse(
+        content=output,
+        status_code=200 if result.returncode == 0 else 500
+    )
 
 # Servir archivos de raíz
 @app.get("/{file_name}")
