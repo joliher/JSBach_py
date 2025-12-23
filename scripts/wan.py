@@ -73,27 +73,40 @@ def wan_start():
         ip = config.get("ip")
         mask = config.get("mask")
         gateway = config.get("gateway")
+            
         try:
             subprocess.run(["ip", "a", "flush", "dev", iface], check=True)
-            subprocess.run(["ip", "a", "add", f"{ip}/{mask}", "dev", iface], check=True)
-            subprocess.run(["ip", "r", "del", "default"], check=False)
-            subprocess.run(["ip", "r", "add", "default", "via", gateway], check=True)
-            subprocess.run(["ip", "link", "set", "dev", iface, "up"], check=True)
         except subprocess.CalledProcessError as e:
-            # Detectamos si la IP ya estaba asignada (opcional)
-            if "File exists" in str(e) or "RTNETLINK answers: File exists" in str(e):
-                print(f"La IP {ip}/{mask} ya estaba asignada a {iface}, ignorando.", file=sys.stderr)
+            print(f"No se pudo borrar la configuración de {iface}")
+            
+        try:
+            subprocess.run(["ip", "a", "add", f"{ip}/{mask}", "dev", iface], check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e:
+            stderr = getattr(e, "stderr", "") or ""
+            if "File exists" in stderr or "RTNETLINK answers: File exists" in stderr:
+                print(f"La IP {ip}/{mask} ya estaba asignada a {iface}, ignorando.")
             else:
-                print(f"Error IP manual: {e}", file=sys.stderr)
-                sys.exit(3)
+                print(f"No se ha podido asignar la IP {ip}/{mask} a {iface}: {e}", file=sys.stderr)
+            sys.exit(3)
+
+        try:
+            subprocess.run(["ip", "l", "set", "dev", iface, "up"], check=True)
+        except subprocess.CalledProcessError as e:
+            print(f"No se ha podido levantar la interfaz {iface}")
+            
+        try:
+            subprocess.run(["ip", "r", "add", "default", "via", gateway, "dev", iface], check=True, capture_output=True, text=True)
+        except subprocess.CalledProcessError as e:
+            stderr = getattr(e, "stderr", "") or ""
+            if "File exists" in stderr or "RTNETLINK answers: File exists" in stderr:
+                print(f"Ya existe una ruta por defecto. Imposible asignar una nueva.")
+            
+        print("WAN iniciada correctamente")
+        sys.exit(0)
 
     else:
         print(f"Error: Modo desconocido '{mode}'", file=sys.stderr)
-        sys.exit(4)
-
-    print("WAN iniciada correctamente")
-    sys.exit(0)
-
+        sys.exit(4) 
 
 def wan_stop():
     config = load_config()
