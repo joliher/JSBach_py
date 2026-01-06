@@ -73,34 +73,95 @@ def wan_start():
         ip = config.get("ip")
         mask = config.get("mask")
         gateway = config.get("gateway")
-            
+        dns = config.get("dns")
+
+        # Procesar DNS
+        if dns:
+            if isinstance(dns, str):
+                dns_list = [d.strip() for d in dns.split(",") if d.strip()]
+            elif isinstance(dns, list):
+                dns_list = dns
+            else:
+                dns_list = []
+        else:
+            dns_list = []
+
+        # Limpiar configuración previa
         try:
             subprocess.run(["ip", "a", "flush", "dev", iface], check=True)
-        except subprocess.CalledProcessError as e:
+        except subprocess.CalledProcessError:
             print(f"No se pudo borrar la configuración de {iface}")
-            
+
+        # Asignar IP
         try:
-            subprocess.run(["ip", "a", "add", f"{ip}/{mask}", "dev", iface], check=True, capture_output=True, text=True)
+            subprocess.run(
+                ["ip", "a", "add", f"{ip}/{mask}", "dev", iface],
+                check=True,
+                capture_output=True,
+                text=True
+            )
         except subprocess.CalledProcessError as e:
             stderr = getattr(e, "stderr", "") or ""
             if "File exists" in stderr or "RTNETLINK answers: File exists" in stderr:
                 print(f"La IP {ip}/{mask} ya estaba asignada a {iface}, ignorando.")
             else:
-                print(f"No se ha podido asignar la IP {ip}/{mask} a {iface}: {e}", file=sys.stderr)
-            sys.exit(3)
+                print(
+                    f"No se ha podido asignar la IP {ip}/{mask} a {iface}: {e}",
+                    file=sys.stderr
+                )
+                sys.exit(3)
 
+        # Levantar interfaz
         try:
             subprocess.run(["ip", "l", "set", "dev", iface, "up"], check=True)
-        except subprocess.CalledProcessError as e:
+        except subprocess.CalledProcessError:
             print(f"No se ha podido levantar la interfaz {iface}")
-            
+
+        # Ruta por defecto
         try:
-            subprocess.run(["ip", "r", "add", "default", "via", gateway, "dev", iface], check=True, capture_output=True, text=True)
+            subprocess.run(
+                ["ip", "r", "add", "default", "via", gateway, "dev", iface],
+                check=True,
+                capture_output=True,
+                text=True
+            )
         except subprocess.CalledProcessError as e:
             stderr = getattr(e, "stderr", "") or ""
             if "File exists" in stderr or "RTNETLINK answers: File exists" in stderr:
-                print(f"Ya existe una ruta por defecto. Imposible asignar una nueva.")
-            
+                print("Ya existe una ruta por defecto. Imposible asignar una nueva.")
+
+        # ----------------------------
+        # DNS PERMANENTE
+        # ----------------------------
+        if dns_list:
+            try:
+                # systemd-resolved (persistente)
+                subprocess.run(["resolvectl", "revert", iface], check=False)
+                subprocess.run(
+                    ["resolvectl", "dns", iface] + dns_list,
+                    check=True
+                )
+                print(f"DNS configurados vía systemd-resolved: {', '.join(dns_list)}")
+
+            except FileNotFoundError:
+                # Fallback clásico: resolv.conf
+                resolv_conf = "/etc/resolv.conf"
+                backup_file = "/etc/resolv.conf.wan.bak"
+                try:
+                    if not os.path.exists(backup_file):
+                        subprocess.run(["cp", resolv_conf, backup_file], check=True)
+
+                    with open(resolv_conf, "w") as f:
+                        for d in dns_list:
+                            f.write(f"nameserver {d}\n")
+
+                    print(f"DNS configurados permanentemente: {', '.join(dns_list)}")
+                except Exception as e:
+                    print(
+                        f"No se pudo configurar DNS permanentemente: {e}",
+                        file=sys.stderr
+                    )
+
         print("WAN iniciada correctamente")
         sys.exit(0)
 
@@ -118,6 +179,32 @@ def wan_stop():
         print("Error: Interfaz WAN no definida", file=sys.stderr)
         sys.exit(4)
 
+    # ----------------------------
+    # Limpiar DNS
+    # ----------------------------
+    try:
+        # Intentar revertir cambios de systemd-resolved
+        subprocess.run(["resolvectl", "revert", iface], check=False)
+        print(f"DNS revertidos para {iface} vía systemd-resolved")
+    except FileNotFoundError:
+        # Fallback clásico
+        resolv_conf = "/etc/resolv.conf"
+        backup_file = "/etc/resolv.conf.wan.bak"
+        try:
+            if os.path.exists(backup_file):
+                subprocess.run(["cp", backup_file, resolv_conf], check=True)
+                print(f"DNS restaurados desde backup {backup_file}")
+            else:
+                # Si no hay backup, limpiar resolv.conf
+                with open(resolv_conf, "w") as f:
+                    f.write("")
+                print(f"DNS eliminados de {resolv_conf}")
+        except Exception as e:
+            print(f"No se pudo limpiar DNS: {e}", file=sys.stderr)
+
+    # ----------------------------
+    # Limpiar IP y rutas
+    # ----------------------------
     try:
         subprocess.run(
             ["ip", "link", "set", "dev", iface, "down"],
@@ -142,8 +229,6 @@ def wan_stop():
         sys.exit(1)
 
     print("WAN detenida correctamente")
-    #sys.exit(0)
-
 
 def wan_status():
     config = load_config()

@@ -1,71 +1,67 @@
 <!DOCTYPE html>
 <html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>WAN - Menú</title>
-<style>
-html, body { 
-    margin: 0; 
-    font-family: Arial, sans-serif; 
-    padding: 10px; 
-}
-button { 
-    display: block; 
-    width: 100%; 
-    margin: 5px 0; 
-    padding: 8px 12px; 
-    cursor: pointer; 
-    border: 1px solid #ccc; 
-    background-color: #eee; 
-}
-button.selected { 
-    background-color: #3399ff; 
-    color: white; 
-    border-color: #007acc; 
-}
-</style>
-</head>
-<body>
+    <head>
+        <meta charset="UTF-8">
+        <title>WAN - Menú</title>
+        <style>
+            html, body { 
+                margin: 0; 
+                font-family: Arial, sans-serif; 
+                padding: 10px; 
+            }
+            button { 
+                display: block; 
+                width: 100%; 
+                margin: 5px 0; 
+                padding: 8px 12px; 
+                cursor: pointer; 
+                border: 1px solid #ccc; 
+                background-color: #eee; 
+            }
+            button.selected { 
+                background-color: #3399ff; 
+                color: white; 
+                border-color: #007acc; 
+            }
+        </style>
+    </head>
+    <body>
 
-<h3>Acciones WAN</h3>
+        <h3>Acciones WAN</h3>
 
-<button id="btnStart" onclick="runWan('start', this)">IFWAN START</button>
-<button id="btnStop" onclick="runWan('stop', this)">IFWAN STOP</button>
-<button id="btnRestart" onclick="runWan('restart', this)">IFWAN RESTART</button>
-<button id="btnStatus" onclick="runWan('status', this)">IFWAN STATUS</button>
-<button id="btnConfig" onclick="runWan('config', this)">IFWAN CONFIG</button>
+        <button id="btnStart" onclick="runWan('start', this)">IFWAN START</button>
+        <button id="btnStop" onclick="runWan('stop', this)">IFWAN STOP</button>
+        <button id="btnRestart" onclick="runWan('restart', this)">IFWAN RESTART</button>
+        <button id="btnStatus" onclick="runWan('status', this)">IFWAN STATUS</button>
+        <button id="btnConfig" onclick="runWan('config', this)">IFWAN CONFIG</button>
 
-<script>
-function runWan(action, btn) {
-    const iframe = parent.frames['body'];
+        <script>
+            function runWan(action, btn) {
+                const iframe = parent.frames['body'];
+                iframe.document.body.style.backgroundColor = "#eef3f8";
 
-    // Actualizamos el color de los botones
-    const botones = document.querySelectorAll("button");
-    botones.forEach(b => b.classList.remove("selected"));
-    btn.classList.add("selected");
+                const botones = document.querySelectorAll("button");
+                botones.forEach(b => b.classList.remove("selected"));
+                btn.classList.add("selected");
 
-    // Guardamos la selección en localStorage
-    localStorage.setItem("wanSelected", btn.id);
+                // Guardar solo durante la pestaña
+                sessionStorage.setItem("wanSelected", btn.id);
 
-    if (action === "config") {
-        // Abrir formulario de configuración
-        iframe.location.href = "/wan/config.html";
-        return;
-    }
+                if (action === "config") {
+                    iframe.location.href = "/wan/config.html";
+                    return;
+                }
 
-    // Ejecutar script con la acción correspondiente
-    iframe.location.href = `/run/wan.py?action=${action}`;
-}
+                iframe.location.href = `/run/wan.py?action=${action}`;
+            }
 
-// Al cargar la página, restauramos el botón seleccionado
-window.addEventListener("DOMContentLoaded", () => {
-    const saved = localStorage.getItem("wanSelected");
-    if (saved) {
-        const btn = document.getElementById(saved);
-        if (btn) btn.classList.add("selected");
-    }
-});
-</script>
-
-</body>
+            window.addEventListener("DOMContentLoaded", () => {
+                const saved = sessionStorage.getItem("wanSelected");
+                if (saved) {
+                    const btn = document.getElementById(saved);
+                    if (btn) btn.classList.add("selected");
+                }
+            });
+        </script>
+    </body>
 </html>
