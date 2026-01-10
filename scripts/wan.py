@@ -4,6 +4,13 @@ import subprocess
 import json
 import os
 
+# -----------------------------
+# Verificar si es root
+# -----------------------------
+if os.geteuid() != 0:
+    print("Necesitas ser root")
+    sys.exit(1)
+
 CONFIG_FILE = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "config",

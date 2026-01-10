@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>BRIDGE - Menú</title>
+    <style>
+        html, body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            padding: 10px;
+        }
+        button {
+            display: block;
+            width: 100%;
+            margin: 5px 0;
+            padding: 8px 12px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            background-color: #eee;
+        }
+        button.selected {
+            background-color: #3399ff;
+            color: white;
+            border-color: #007acc;
+        }
+    </style>
+</head>
+<body>
+
+<h3>Acciones BRIDGE</h3>
+
+<button id="btnStart"   onclick="runBridge('--start', this)">BRIDGE START</button>
+<button id="btnStop"    onclick="runBridge('--stop', this)">BRIDGE STOP</button>
+<button id="btnRestart" onclick="runBridge('--restart', this)">BRIDGE RESTART</button>
+<button id="btnStatus"  onclick="runBridge('--status', this)">BRIDGE STATUS</button>
+
+<hr>
+
+<button id="btnVlans"  onclick="openConfig('vlans', this)">CONFIG VLANS</button>
+<button id="btnBridge" onclick="openConfig('bridge', this)">CONFIG BRIDGE</button>
+
+<script>
+function runBridge(flag, btn) {
+    const iframe = parent.frames['body'];
+
+    // UI
+    document.querySelectorAll("button")
+        .forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    sessionStorage.setItem("bridgeSelected", btn.id);
+
+    // El backend convierte ?start → --start
+    iframe.location.href = `/run/bridge.py?${flag.replace('--', '')}`;
+}
+
+function openConfig(section, btn) {
+    const iframe = parent.frames['body'];
+
+    document.querySelectorAll("button")
+        .forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    sessionStorage.setItem("bridgeSelected", btn.id);
+
+    if (section === "vlans") {
+        iframe.location.href = "/bridge/config_vlan.html";
+    } else if (section === "bridge") {
+        iframe.location.href = "/bridge/config_bridge.html";
+    }
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+    const saved = sessionStorage.getItem("bridgeSelected");
+    if (saved) {
+        const btn = document.getElementById(saved);
+        if (btn) btn.classList.add("selected");
+    }
+});
+</script>
+
+</body>
+</html>

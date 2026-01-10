@@ -23,7 +23,7 @@ for func in FUNCIONES:
 ALLOWED_STATIC = {"header.html", "status.html", "info.html"}
 
 # Scripts permitidos
-ALLOWED_SCRIPTS = {"wan.py"}
+ALLOWED_SCRIPTS = {"wan.py", "nat.py", "bridge.py", "firewall.py"}
 SCRIPT_TIMEOUT = 5
 
 # Ejecutar script

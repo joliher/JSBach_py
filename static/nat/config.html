@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>NAT - Configuración</title>
+    <style>
+        html, body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #eef3f8;
+            padding: 10px;
+        }
+        button {
+            margin: 5px 0;
+            padding: 8px 12px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            background-color: #eee;
+        }
+        button:hover {
+            background-color: #e0e0e0;
+        }
+        label {
+            display: block;
+            margin: 8px 0;
+        }
+        input {
+            padding: 5px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        pre {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-size: 14px;
+            background: #f8f8f8;
+            padding: 10px;
+            border: 1px solid #ddd;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+
+<h3>Configuración NAT</h3>
+
+<pre id="output">
+Introduce la interfaz de salida (ej: eth0, ens33, wlan0) y pulsa "Guardar Configuración".
+</pre>
+
+<form id="natConfigForm" onsubmit="submitConfig(event)">
+    <label>
+        Interfaz de salida:
+        <input type="text" id="interfaz" placeholder="eth0" required>
+    </label>
+
+    <button type="submit">Guardar Configuración</button>
+</form>
+
+<script>
+window.addEventListener("DOMContentLoaded", () => {
+    // Restaurar interfaz si existe
+    const savedIface = localStorage.getItem("natInterfaz");
+    if (savedIface) {
+        document.getElementById("interfaz").value = savedIface;
+    }
+});
+
+async function submitConfig(event) {
+    event.preventDefault();
+
+    const interfaz = document.getElementById("interfaz").value;
+    const output = document.getElementById("output");
+
+    // Guardar localmente
+    localStorage.setItem("natInterfaz", interfaz);
+
+    try {
+        // ?config → --config
+        // &interfaz=eth0 → --interfaz=eth0
+        const resp = await fetch(`/run/nat.py?config&interfaz=${encodeURIComponent(interfaz)}`);
+        const text = await resp.text();
+        output.textContent = text;
+    } catch (err) {
+        output.textContent = "Error al guardar la configuración NAT: " + err;
+    }
+}
+</script>
+
+</body>
+</html>

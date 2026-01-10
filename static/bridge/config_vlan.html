@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Bridge - Configuración VLANs</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #eef3f8;
+            padding: 10px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #fff;
+        }
+
+        th, td {
+            border: 1px solid #ccc;
+            padding: 6px;
+            text-align: left;
+        }
+
+        th {
+            background: #f0f0f0;
+        }
+
+        input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 4px;
+        }
+
+        button {
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+
+        .actions {
+            white-space: nowrap;
+        }
+
+        h3 {
+            margin-top: 0;
+        }
+
+        .add-box {
+            margin-top: 15px;
+            background: #fff;
+            padding: 10px;
+            border: 1px solid #ccc;
+        }
+
+        pre {
+            margin-top: 10px;
+            background: #f8f8f8;
+            padding: 10px;
+            border: 1px solid #ccc;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+<body>
+
+<h3>Configuración de VLANs</h3>
+
+<table id="vlanTable">
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>Red</th>
+            <th>IP Gateway</th>
+            <th>Acciones</th>
+        </tr>
+    </thead>
+    <tbody>
+        <!-- Se rellena por JS -->
+    </tbody>
+</table>
+
+<div class="add-box">
+    <h4>Añadir nueva VLAN</h4>
+    <label>ID: <input type="number" id="newId"></label><br>
+    <label>Nombre: <input type="text" id="newName"></label><br>
+    <label>Red: <input type="text" id="newNetwork"></label><br>
+    <label>IP Gateway: <input type="text" id="newIp"></label><br><br>
+    <button onclick="addVlan()">Añadir VLAN</button>
+</div>
+
+<pre id="output">Cargando VLANs...</pre>
+
+<script>
+async function loadVlans() {
+    const resp = await fetch("/run/bridge.py?config=vlans&action=show");
+    const data = await resp.text();
+    document.getElementById("output").textContent = data;
+
+    let json;
+    try {
+        json = JSON.parse(data);
+    } catch {
+        return;
+    }
+
+    const tbody = document.querySelector("#vlanTable tbody");
+    tbody.innerHTML = "";
+
+    json.vlans.forEach(vlan => {
+        const tr = document.createElement("tr");
+
+        tr.innerHTML = `
+            <td>${vlan.id}</td>
+            <td><input value="${vlan.name}"></td>
+            <td><input value="${vlan.network}"></td>
+            <td><input value="${vlan.ip}"></td>
+            <td class="actions">
+                <button onclick="saveVlan(this, ${vlan.id})">Modificar</button>
+                <button onclick="delVlan(${vlan.id})">Eliminar</button>
+            </td>
+        `;
+
+        tbody.appendChild(tr);
+    });
+}
+
+async function saveVlan(btn, id) {
+    const row = btn.closest("tr");
+    const inputs = row.querySelectorAll("input");
+
+    const params = new URLSearchParams({
+        config: "vlans",
+        action: "save",
+        id: id,
+        name: inputs[0].value,
+        network: inputs[1].value,
+        ip: inputs[2].value
+    });
+
+    const resp = await fetch(`/run/bridge.py?${params}`);
+    document.getElementById("output").textContent = await resp.text();
+    loadVlans();
+}
+
+async function delVlan(id) {
+    if (!confirm(`Eliminar VLAN ${id}?`)) return;
+
+    const params = new URLSearchParams({
+        config: "vlans",
+        action: "del",
+        id: id
+    });
+
+    const resp = await fetch(`/run/bridge.py?${params}`);
+    document.getElementById("output").textContent = await resp.text();
+    loadVlans();
+}
+
+async function addVlan() {
+    const params = new URLSearchParams({
+        config: "vlans",
+        action: "save",
+        id: document.getElementById("newId").value,
+        name: document.getElementById("newName").value,
+        network: document.getElementById("newNetwork").value,
+        ip: document.getElementById("newIp").value
+    });
+
+    const resp = await fetch(`/run/bridge.py?${params}`);
+    document.getElementById("output").textContent = await resp.text();
+    loadVlans();
+}
+
+window.addEventListener("DOMContentLoaded", loadVlans);
+</script>
+
+</body>
+</html>

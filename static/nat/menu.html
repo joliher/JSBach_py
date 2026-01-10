@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>NAT - Menú</title>
+    <style>
+        html, body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            padding: 10px;
+        }
+        button {
+            display: block;
+            width: 100%;
+            margin: 5px 0;
+            padding: 8px 12px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            background-color: #eee;
+        }
+        button.selected {
+            background-color: #3399ff;
+            color: white;
+            border-color: #007acc;
+        }
+    </style>
+</head>
+<body>
+
+<h3>Acciones NAT</h3>
+
+<button id="btnStart"  onclick="runNat('--start', this)">NAT START</button>
+<button id="btnStop"   onclick="runNat('--stop', this)">NAT STOP</button>
+<button id="btnStatus" onclick="runNat('--status', this)">NAT STATUS</button>
+<button id="btnConfig" onclick="openConfig(this)">NAT CONFIG</button>
+
+<script>
+function runNat(flag, btn) {
+    const iframe = parent.frames['body'];
+
+    // UI
+    document.querySelectorAll("button")
+        .forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    sessionStorage.setItem("natSelected", btn.id);
+
+    // IMPORTANTE:
+    // ?start  → backend genera --start
+    // ?stop   → backend genera --stop
+    // ?status → backend genera --status
+    iframe.location.href = `/run/nat.py?${flag.replace('--', '')}`;
+}
+
+function openConfig(btn) {
+    const iframe = parent.frames['body'];
+
+    document.querySelectorAll("button")
+        .forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    sessionStorage.setItem("natSelected", btn.id);
+
+    iframe.location.href = "/nat/config.html";
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+    const saved = sessionStorage.getItem("natSelected");
+    if (saved) {
+        const btn = document.getElementById(saved);
+        if (btn) btn.classList.add("selected");
+    }
+});
+</script>
+
+</body>
+</html>
