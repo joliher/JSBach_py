@@ -225,7 +225,7 @@ def bridge_config(params):
             print("Uso: --config show [vlans|bridge]")
     elif action == "save":
         if section == "vlans":
-            required = ["id", "name", "ip", "pvid"]
+            required = ["id", "name", "ip", "network"]
             if not all(k in params for k in required):
                 print("Faltan parámetros para guardar VLAN")
                 return
@@ -234,7 +234,7 @@ def bridge_config(params):
                 "id": int(params["id"]),
                 "name": params["name"],
                 "ip": params.get("ip"),
-                "pvid": params.get("pvid")
+                "network": params.get("network")
             })
             save_json(VLANS_FILE, vlans)
             print("VLAN guardada")

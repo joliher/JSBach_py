@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<title>CONFIG VLANS</title>
+<title>CONFIG BRIDGE</title>
 
 <style>
 body {
@@ -48,6 +48,7 @@ input, form button {
     width: 100%;
 }
 
+/* Colores botones */
 .btn-edit {
     background-color: #ccc;
     border: 1px solid #999;
@@ -70,64 +71,54 @@ input, form button {
     color: white;
     border: 1px solid #b52b27;
 }
-
-button:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-}
 </style>
 </head>
 
 <body>
 
-<h3>VLANs configuradas</h3>
+<h3>Interfaces del bridge</h3>
 
-<table id="vlansTable">
+<table id="bridgeTable">
     <thead>
         <tr>
-            <th>ID</th>
-            <th>Nombre</th>
-            <th>Network</th>
-            <th>IP</th>
+            <th>Interface</th>
+            <th>VLAN Untag</th>
+            <th>VLAN Tag</th>
             <th>Acciones</th>
         </tr>
     </thead>
     <tbody></tbody>
 </table>
 
-<h3>Nueva VLAN</h3>
+<h3>Nueva Interface</h3>
 
-<form id="vlanForm">
-    <label>ID VLAN</label>
-    <input type="number" name="id" required>
-
-    <label>Nombre</label>
+<form id="bridgeForm">
+    <label>Nombre de la interface</label>
     <input type="text" name="name" required>
 
-    <label>Network (ej: 10.0.0.0/24)</label>
-    <input type="text" name="network" required>
+    <label>VLAN Untag (ej: 10)</label>
+    <input type="text" name="vlan_untag">
 
-    <label>IP (ej: 10.0.0.1)</label>
-    <input type="text" name="ip" required>
+    <label>VLAN Tag (ej: 20,30)</label>
+    <input type="text" name="vlan_tag">
 
-    <button type="submit">Guardar VLAN</button>
+    <button type="submit">Guardar Interface</button>
 </form>
 
 <pre id="output"></pre>
 
 <script>
-let vlanCache = {};
-const PROTECTED_VLANS = [1, 2];
+let bridgeCache = {};
 
-async function loadVlans() {
-    const res = await fetch("/run/bridge.py?config&action=show&section=vlans");
+async function loadBridge() {
+    const res = await fetch("/run/bridge.py?config&action=show&section=bridge");
     const text = await res.text();
 
-    const tbody = document.querySelector("#vlansTable tbody");
+    const tbody = document.querySelector("#bridgeTable tbody");
     tbody.innerHTML = "";
-    vlanCache = {};
+    bridgeCache = {};
 
-    const vlans = [];
+    const ifaces = [];
 
     text.split("\n").forEach(line => {
         line = line.trim();
@@ -136,37 +127,32 @@ async function loadVlans() {
         const jsonLine = line.replace(/'/g, '"');
 
         try {
-            const vlan = JSON.parse(jsonLine);
-            vlans.push(vlan);
+            const iface = JSON.parse(jsonLine);
+            ifaces.push(iface);
         } catch (e) {
-            console.error("Error parseando VLAN:", line);
+            console.error("Error parseando interface:", line);
         }
     });
 
-    // 🔹 ORDENAR POR ID
-    vlans.sort((a, b) => a.id - b.id);
+    /* 🔹 Ordenar por nombre de interface */
+    ifaces.sort((a, b) => a.name.localeCompare(b.name));
 
-    // 🔹 PINTAR TABLA
-    vlans.forEach(vlan => {
-        vlanCache[vlan.id] = vlan;
+    /* 🔹 Pintar tabla */
+    ifaces.forEach(iface => {
+        bridgeCache[iface.name] = iface;
 
         const tr = document.createElement("tr");
-        tr.dataset.id = vlan.id;
-
-        const isProtected = PROTECTED_VLANS.includes(vlan.id);
+        tr.dataset.name = iface.name;
 
         tr.innerHTML = `
-            <td>${vlan.id}</td>
-            <td>${vlan.name ?? ""}</td>
-            <td>${vlan.network ?? ""}</td>
-            <td>${vlan.ip ?? ""}</td>
+            <td>${iface.name}</td>
+            <td>${iface.vlan_untag ?? ""}</td>
+            <td>${iface.vlan_tag ?? ""}</td>
             <td>
-                <button class="btn-edit" onclick="editRow(${vlan.id})">
+                <button class="btn-edit" onclick="editRow('${iface.name}')">
                     Modificar
                 </button>
-                <button class="btn-delete"
-                        onclick="deleteVlan(${vlan.id})"
-                        ${isProtected ? "disabled" : ""}>
+                <button class="btn-delete" onclick="deleteIface('${iface.name}')">
                     Eliminar
                 </button>
             </td>
@@ -176,78 +162,75 @@ async function loadVlans() {
     });
 }
 
-function editRow(id) {
-    const tr = document.querySelector(`tr[data-id="${id}"]`);
-    const vlan = vlanCache[id];
+function editRow(name) {
+    const tr = document.querySelector(`tr[data-name="${name}"]`);
+    const iface = bridgeCache[name];
 
     tr.innerHTML = `
-        <td>${vlan.id}</td>
-        <td><input type="text" value="${vlan.name ?? ""}"></td>
-        <td><input type="text" value="${vlan.network ?? ""}"></td>
-        <td><input type="text" value="${vlan.ip ?? ""}"></td>
+        <td>${iface.name}</td>
+        <td><input type="text" value="${iface.vlan_untag ?? ""}"></td>
+        <td><input type="text" value="${iface.vlan_tag ?? ""}"></td>
         <td>
-            <button class="btn-save" onclick="saveRow(${id})">Guardar</button>
+            <button class="btn-save" onclick="saveRow('${name}')">Guardar</button>
             <button class="btn-cancel" onclick="cancelEdit()">Cancelar</button>
         </td>
     `;
 }
 
-async function saveRow(id) {
-    const tr = document.querySelector(`tr[data-id="${id}"]`);
+async function saveRow(name) {
+    const tr = document.querySelector(`tr[data-name="${name}"]`);
     const inputs = tr.querySelectorAll("input");
 
-    const [name, network, ip] = Array.from(inputs).map(i => i.value);
+    const [vlan_untag, vlan_tag] = Array.from(inputs).map(i => i.value);
 
     const params = new URLSearchParams({
         config: "",
         action: "save",
-        section: "vlans",
-        id: id,
+        section: "bridge",
         name: name,
-        network: network,
-        ip: ip
+        vlan_untag: vlan_untag,
+        vlan_tag: vlan_tag
     });
 
     const res = await fetch(`/run/bridge.py?${params.toString()}`);
     const text = await res.text();
     document.getElementById("output").textContent = text;
 
-    loadVlans();
+    loadBridge();
 }
 
 function cancelEdit() {
-    loadVlans();
+    loadBridge();
 }
 
-async function deleteVlan(id) {
-    if (!confirm(`¿Eliminar VLAN ${id}?`)) return;
+async function deleteIface(name) {
+    if (!confirm(`¿Eliminar interface ${name}?`)) return;
 
     const params = new URLSearchParams({
         config: "",
         action: "del",
-        section: "vlans",
-        id: id
+        section: "bridge",
+        name: name
     });
 
     const res = await fetch(`/run/bridge.py?${params.toString()}`);
     const text = await res.text();
     document.getElementById("output").textContent = text;
 
-    loadVlans();
+    loadBridge();
 }
 
-document.getElementById("vlanForm").addEventListener("submit", async e => {
+document.getElementById("bridgeForm").addEventListener("submit", async e => {
     e.preventDefault();
 
     const form = e.target;
     const params = new URLSearchParams({
         config: "",
         action: "save",
-        section: "vlans",
-        id: form.id.value,
+        section: "bridge",
         name: form.name.value,
-        network: form.network.value,
-        ip: form.ip.value
+        vlan_untag: form.vlan_untag.value,
+        vlan_tag: form.vlan_tag.value
     });
 
     const res = await fetch(`/run/bridge.py?${params.toString()}`);
@@ -255,10 +238,10 @@ document.getElementById("vlanForm").addEventListener("submit", async e => {
     document.getElementById("output").textContent = text;
 
     form.reset();
-    loadVlans();
+    loadBridge();
 });
 
-loadVlans();
+loadBridge();
 </script>
 
 </body>
