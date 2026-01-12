@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Status de Archivos</title>
+    <style>
+        table {
+            width: 70%;
+            border-collapse: collapse;
+            margin: 20px auto;
+        }
+        th, td {
+            border: 1px solid #333;
+            padding: 8px 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #555;
+            color: #fff;
+        }
+        tr:nth-child(even) {
+            background-color: #f2f2f2;
+        }
+        .ACTIVO {
+            color: green;
+            font-weight: bold;
+        }
+        .INACTIVO {
+            color: red;
+            font-weight: bold;
+        }
+        .DESCONOCIDO {
+            color: gray;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <h2 style="text-align:center;">Status de Archivos</h2>
+    <table id="status-table">
+        <thead>
+            <tr>
+                <th>Archivo</th>
+                <th>Estado</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Filas generadas por JS -->
+        </tbody>
+    </table>
+
+    <script>
+        fetch('/run/status.py')
+            .then(response => response.text())
+            .then(data => {
+                const tbody = document.querySelector('#status-table tbody');
+                const lineas = data.trim().split('\n');
+
+                lineas.forEach(linea => {
+                    const partes = linea.split('|').map(s => s.trim());
+                    if (partes.length < 2) return; // ignorar líneas inválidas
+
+                    const fila = document.createElement('tr');
+
+                    // Mostrar solo el nombre del archivo
+                    const archivoNombre = partes[0].split(/[/\\]/).pop();
+
+                    const archivoTd = document.createElement('td');
+                    archivoTd.textContent = archivoNombre;
+                    fila.appendChild(archivoTd);
+
+                    // Estado con color
+                    const estado = partes[1];
+                    const estadoTd = document.createElement('td');
+                    estadoTd.textContent = estado;
+
+                    // Asignar clase según estado
+                    if (estado === "ACTIVO") estadoTd.className = "ACTIVO";
+                    else if (estado === "INACTIVO") estadoTd.className = "INACTIVO";
+                    else estadoTd.className = "DESCONOCIDO";
+
+                    fila.appendChild(estadoTd);
+
+                    tbody.appendChild(fila);
+                });
+            })
+            .catch(err => console.error('Error al obtener el status:', err));
+    </script>
+</body>
+</html>

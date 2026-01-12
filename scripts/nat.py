@@ -21,7 +21,7 @@ def cargar_config():
     if not os.path.exists(CONFIG_FILE):
         os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
         # Configuración por defecto
-        config_default = {"interfaz": "", "estado": 0}
+        config_default = {"interfaz": "", "status": 0}
         with open(CONFIG_FILE, "w") as f:
             json.dump(config_default, f, indent=4)
         return config_default
@@ -71,7 +71,7 @@ def nat_start():
             check=True
         )
         # Actualizar estado en JSON
-        config["estado"] = 1
+        config["status"] = 1
         guardar_config(config)
         print(f"NAT activado en la interfaz {interfaz}")
     except Exception as e:
@@ -99,7 +99,7 @@ def nat_stop():
             check=False
         )
         # Actualizar estado en JSON
-        config["estado"] = 0
+        config["status"] = 0
         guardar_config(config)
         print(f"NAT desactivado en la interfaz {interfaz}")
     except Exception as e:
@@ -135,7 +135,7 @@ def nat_config(params):
         print("Error: Falta el parámetro 'interfaz' para la configuración NAT", file=sys.stderr)
         sys.exit(1)
 
-    config = {"interfaz": interfaz, "estado": 0}
+    config = {"interfaz": interfaz, "status": 0}
     guardar_config(config)
     print(f"Configuración NAT guardada correctamente. Interfaz: {interfaz}")
 

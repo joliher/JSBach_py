@@ -1,10 +1,10 @@
 {
     "interfaces": [
         {
-            "name": "eth0",
-            "vlan_untag": "1-2",
-            "vlan_tag": "3-4,6"
+            "name": "enxc84d44295146",
+            "vlan_untag": "",
+            "vlan_tag": ""
         }
     ],
-    "status": 1
+    "status": 0
 }

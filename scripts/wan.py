@@ -21,6 +21,23 @@ CONFIG_FILE = os.path.join(
 # Utilidades
 # --------------------------------------------------
 
+def update_status_json(estado):
+    """
+    Actualiza el campo 'status' en el archivo de configuración WAN.
+    estado: 0 = INACTIVO, 1 = ACTIVO
+    """
+    config = load_config()
+    if config is None:
+        config = {}  # Si no existe config, crear diccionario vacío
+
+    config["status"] = estado
+
+    try:
+        with open(CONFIG_FILE, "w") as f:
+            json.dump(config, f, indent=4)
+    except Exception as e:
+        print(f"No se pudo actualizar el status en el JSON: {e}", file=sys.stderr)
+
 def load_config():
     if not os.path.exists(CONFIG_FILE):
         print("Error: Archivo de configuración WAN no encontrado", file=sys.stderr)
@@ -170,6 +187,7 @@ def wan_start():
                     )
 
         print("WAN iniciada correctamente")
+        update_status_json(1)
         sys.exit(0)
 
     else:
@@ -236,6 +254,7 @@ def wan_stop():
         sys.exit(1)
 
     print("WAN detenida correctamente")
+    update_status_json(0)
 
 def wan_status():
     config = load_config()

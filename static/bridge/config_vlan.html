@@ -87,7 +87,6 @@ button:disabled {
         <tr>
             <th>ID</th>
             <th>Nombre</th>
-            <th>Network</th>
             <th>IP</th>
             <th>Acciones</th>
         </tr>
@@ -104,10 +103,7 @@ button:disabled {
     <label>Nombre</label>
     <input type="text" name="name" required>
 
-    <label>Network (ej: 10.0.0.0/24)</label>
-    <input type="text" name="network" required>
-
-    <label>IP (ej: 10.0.0.1)</label>
+    <label>IP (ej: 10.0.0.1/24)</label>
     <input type="text" name="ip" required>
 
     <button type="submit">Guardar VLAN</button>
@@ -118,6 +114,13 @@ button:disabled {
 <script>
 let vlanCache = {};
 const PROTECTED_VLANS = [1, 2];
+
+function isValidCIDR(ip) {
+    const cidrRegex =
+        /^(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d\d|[1-9]?\d)){3}\/([0-9]|[1-2]\d|3[0-2])$/;
+
+    return cidrRegex.test(ip);
+}
 
 async function loadVlans() {
     const res = await fetch("/run/bridge.py?config&action=show&section=vlans");
@@ -143,10 +146,10 @@ async function loadVlans() {
         }
     });
 
-    // 🔹 ORDENAR POR ID
+    // ORDENAR POR ID
     vlans.sort((a, b) => a.id - b.id);
 
-    // 🔹 PINTAR TABLA
+    // PINTAR TABLA
     vlans.forEach(vlan => {
         vlanCache[vlan.id] = vlan;
 
@@ -158,7 +161,6 @@ async function loadVlans() {
         tr.innerHTML = `
             <td>${vlan.id}</td>
             <td>${vlan.name ?? ""}</td>
-            <td>${vlan.network ?? ""}</td>
             <td>${vlan.ip ?? ""}</td>
             <td>
                 <button class="btn-edit" onclick="editRow(${vlan.id})">
@@ -183,7 +185,6 @@ function editRow(id) {
     tr.innerHTML = `
         <td>${vlan.id}</td>
         <td><input type="text" value="${vlan.name ?? ""}"></td>
-        <td><input type="text" value="${vlan.network ?? ""}"></td>
         <td><input type="text" value="${vlan.ip ?? ""}"></td>
         <td>
             <button class="btn-save" onclick="saveRow(${id})">Guardar</button>
@@ -196,7 +197,12 @@ async function saveRow(id) {
     const tr = document.querySelector(`tr[data-id="${id}"]`);
     const inputs = tr.querySelectorAll("input");
 
-    const [name, network, ip] = Array.from(inputs).map(i => i.value);
+    const [name, ip] = Array.from(inputs).map(i => i.value.trim());
+
+    if (!isValidCIDR(ip)) {
+        alert("IP inválida. Formato esperado: 10.0.0.1/24");
+        return;
+    }
 
     const params = new URLSearchParams({
         config: "",
@@ -204,13 +210,11 @@ async function saveRow(id) {
         section: "vlans",
         id: id,
         name: name,
-        network: network,
         ip: ip
     });
 
     const res = await fetch(`/run/bridge.py?${params.toString()}`);
-    const text = await res.text();
-    document.getElementById("output").textContent = text;
+    document.getElementById("output").textContent = await res.text();
 
     loadVlans();
 }
@@ -240,19 +244,24 @@ document.getElementById("vlanForm").addEventListener("submit", async e => {
     e.preventDefault();
 
     const form = e.target;
+    const ip = form.ip.value.trim();
+
+    if (!isValidCIDR(ip)) {
+        alert("IP inválida. Usa formato CIDR, por ejemplo: 10.0.0.1/24");
+        return;
+    }
+
     const params = new URLSearchParams({
         config: "",
         action: "save",
         section: "vlans",
         id: form.id.value,
         name: form.name.value,
-        network: form.network.value,
-        ip: form.ip.value
+        ip: ip
     });
 
     const res = await fetch(`/run/bridge.py?${params.toString()}`);
-    const text = await res.text();
-    document.getElementById("output").textContent = text;
+    document.getElementById("output").textContent = await res.text();
 
     form.reset();
     loadVlans();

@@ -134,11 +134,21 @@ async function loadBridge() {
         }
     });
 
+    if (ifaces.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="4">(No hay interfaces configuradas)</td>
+            </tr>
+        `;
+        return;
+    }
+
     /* 🔹 Ordenar por nombre de interface */
     ifaces.sort((a, b) => a.name.localeCompare(b.name));
 
     /* 🔹 Pintar tabla */
     ifaces.forEach(iface => {
+        if (!iface.name) return;
         bridgeCache[iface.name] = iface;
 
         const tr = document.createElement("tr");
@@ -181,20 +191,23 @@ async function saveRow(name) {
     const tr = document.querySelector(`tr[data-name="${name}"]`);
     const inputs = tr.querySelectorAll("input");
 
-    const [vlan_untag, vlan_tag] = Array.from(inputs).map(i => i.value);
+    let [vlan_untag, vlan_tag] = Array.from(inputs).map(i => i.value.trim());
+
+    vlan_untag = vlan_untag === "" ? null : vlan_untag;
+    vlan_tag   = vlan_tag === "" ? null : vlan_tag;
 
     const params = new URLSearchParams({
         config: "",
         action: "save",
         section: "bridge",
-        name: name,
-        vlan_untag: vlan_untag,
-        vlan_tag: vlan_tag
+        name: name
     });
 
+    if (vlan_untag !== null) params.append("vlan_untag", vlan_untag);
+    if (vlan_tag !== null)   params.append("vlan_tag", vlan_tag);
+
     const res = await fetch(`/run/bridge.py?${params.toString()}`);
-    const text = await res.text();
-    document.getElementById("output").textContent = text;
+    document.getElementById("output").textContent = await res.text();
 
     loadBridge();
 }
@@ -224,14 +237,22 @@ document.getElementById("bridgeForm").addEventListener("submit", async e => {
     e.preventDefault();
 
     const form = e.target;
+
+    let vlan_untag = form.vlan_untag.value.trim();
+    let vlan_tag   = form.vlan_tag.value.trim();
+
+    vlan_untag = vlan_untag === "" ? null : vlan_untag;
+    vlan_tag   = vlan_tag === "" ? null : vlan_tag;
+
     const params = new URLSearchParams({
         config: "",
         action: "save",
         section: "bridge",
-        name: form.name.value,
-        vlan_untag: form.vlan_untag.value,
-        vlan_tag: form.vlan_tag.value
+        name: form.name.value
     });
+
+    if (vlan_untag !== null) params.append("vlan_untag", vlan_untag);
+    if (vlan_tag   !== null) params.append("vlan_tag", vlan_tag);
 
     const res = await fetch(`/run/bridge.py?${params.toString()}`);
     const text = await res.text();

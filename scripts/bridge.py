@@ -22,7 +22,6 @@ BRIDGE_FILE = os.path.join(CONFIG_DIR, "bridge.json")
 def bridge_exists():
     return os.path.exists("/sys/class/net/br0")
 
-
 def ensure_root():
     if os.geteuid() != 0:
         print("Necesitas ser root")
@@ -192,20 +191,53 @@ def bridge_restart():
     bridge_start()
     print("Bridge REINICIADO")
 
+import subprocess
+
 def bridge_status():
-    vlans = load_json(VLANS_FILE, {"vlans":[]})
-    bridges = load_json(BRIDGE_FILE, {"interfaces":[]})
+    vlans = load_json(VLANS_FILE, {"vlans": []})
+    bridges = load_json(BRIDGE_FILE, {"interfaces": []})
+
     active = vlans.get("status", 0) == 1 and bridges.get("status", 0) == 1
+
+    # ----- ESTADO -----
     if active:
         print("Bridge ACTIVO")
     else:
         print("Bridge INACTIVO")
+
+    # ----- VLANS -----
     print("\nVLANS CONFIGURADAS:")
-    for vlan in vlans["vlans"]:
-        print(vlan)
+    try:
+        result = subprocess.run(
+            ["ip", "-br", "addr", "show", "type", "vlan"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        if result.stdout.strip():
+            print(result.stdout.rstrip())
+        else:
+            print("(sin datos)")
+    except subprocess.CalledProcessError as e:
+        print("Error al mostrar el estado de las VLANS")
+        print(e.stderr or str(e))
+
+    # ----- INTERFACES -----
     print("\nINTERFACES CONFIGURADAS:")
-    for iface in bridges["interfaces"]:
-        print(iface)
+    try:
+        result = subprocess.run(
+            ["bridge", "vlan", "show"],
+            capture_output=True,
+            text=True,
+            check=True
+        )
+        if result.stdout.strip():
+            print(result.stdout.rstrip())
+        else:
+            print("(sin datos)")
+    except subprocess.CalledProcessError as e:
+        print("Error al mostrar el estado del BRIDGE")
+        print(e.stderr or str(e))
 
 def bridge_config(params):
     vlans = load_json(VLANS_FILE, {"vlans":[]})
@@ -225,7 +257,7 @@ def bridge_config(params):
             print("Uso: --config show [vlans|bridge]")
     elif action == "save":
         if section == "vlans":
-            required = ["id", "name", "ip", "network"]
+            required = ["id", "name", "ip"]
             if not all(k in params for k in required):
                 print("Faltan parámetros para guardar VLAN")
                 return
@@ -233,8 +265,7 @@ def bridge_config(params):
             vlans["vlans"].append({
                 "id": int(params["id"]),
                 "name": params["name"],
-                "ip": params.get("ip"),
-                "network": params.get("network")
+                "ip": params.get("ip")
             })
             save_json(VLANS_FILE, vlans)
             print("VLAN guardada")
@@ -243,12 +274,21 @@ def bridge_config(params):
             if not all(k in params for k in required):
                 print("Faltan parámetros para guardar interface")
                 return
+
+            # Normalizar campos vacíos
+            vlan_untag = params.get("vlan_untag") or ""
+            vlan_tag   = params.get("vlan_tag") or ""
+
+            # Eliminar si ya existía la interface
             bridges["interfaces"] = [b for b in bridges["interfaces"] if b.get("name") != params["name"]]
+
+            # Guardar la interface
             bridges["interfaces"].append({
                 "name": params["name"],
-                "vlan_untag": params.get("vlan_untag"),
-                "vlan_tag": params.get("vlan_tag")
+                "vlan_untag": vlan_untag,
+                "vlan_tag": vlan_tag
             })
+
             save_json(BRIDGE_FILE, bridges)
             print("Interface guardada")
         else:
