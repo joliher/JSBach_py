@@ -89,6 +89,8 @@ def wan_start():
                 capture_output=True,
                 text=True
             )
+            print("DHCP configurado correctamente")
+            update_status_json(1)
         except subprocess.CalledProcessError as e:
             print(f"Error DHCP: {e}", file=sys.stderr)
             sys.exit(2)
@@ -249,6 +251,17 @@ def wan_stop():
             capture_output=True,
             text=True
         )
+        try:
+            subprocess.run(
+                ["dhcpcd", "-k", iface],
+                check=True,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                text=True
+            )
+        except subprocess.CalledProcessError:
+            pass
+
     except subprocess.CalledProcessError as e:
         print(f"Error al detener WAN: {e}", file=sys.stderr)
         sys.exit(1)

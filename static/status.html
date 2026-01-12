@@ -63,8 +63,8 @@
                     const fila = document.createElement('tr');
 
                     // Mostrar solo el nombre del archivo
-                    const archivoNombre = partes[0].split(/[/\\]/).pop();
-
+                    const archivoCompleto = (partes[0].split(/[/\\]/).pop()).split(".", 1);
+                    const archivoNombre = archivoCompleto[0].toUpperCase();
                     const archivoTd = document.createElement('td');
                     archivoTd.textContent = archivoNombre;
                     fila.appendChild(archivoTd);

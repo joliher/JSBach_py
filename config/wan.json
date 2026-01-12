@@ -1,4 +1,5 @@
 {
     "mode": "dhcp",
-    "interface": "eno1"
+    "interface": "eno1",
+    "status": 1
 }
