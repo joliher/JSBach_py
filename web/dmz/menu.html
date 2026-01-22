@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>DMZ - Menú</title>
+    <style>
+        html, body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            padding: 10px;
+            background-color: #f5f5f5;
+        }
+        h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        button {
+            display: block;
+            width: 100%;
+            margin: 5px 0;
+            padding: 10px 12px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            background-color: #fff;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background-color: #e8f4ff;
+        }
+        button.selected {
+            background-color: #3399ff;
+            color: white;
+            border-color: #007acc;
+            font-weight: bold;
+        }
+        hr {
+            border: none;
+            border-top: 1px solid #ddd;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+
+<h3>📡 DMZ</h3>
+
+<!-- Acciones principales -->
+<button id="btnStart" onclick="executeAction('start', this)">🚀 DMZ START</button>
+<button id="btnStop" onclick="executeAction('stop', this)">🛑 DMZ STOP</button>
+<button id="btnRestart" onclick="executeAction('restart', this)">🔄 DMZ RESTART</button>
+<button id="btnStatus" onclick="openPage('status', this)">📊 DMZ STATUS</button>
+
+<hr>
+
+<h4 style="margin: 10px 0; color: #555;">Configuración</h4>
+
+<button id="btnConfig" onclick="openPage('config', this)">⚙️ DMZ CONFIG</button>
+
+<hr>
+
+<button id="btnInfo" onclick="openPage('info', this)">ℹ️ VER INFO</button>
+
+<script>
+function openPage(page, btn) {
+    const iframe = parent.frames['body'];
+    
+    // Resaltar botón seleccionado
+    document.querySelectorAll("button").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    sessionStorage.setItem("dmzSelected", btn.id);
+    
+    iframe.location.href = `/web/dmz/${page}.html`;
+}
+
+async function executeAction(action, btn) {
+    // Resaltar botón seleccionado y cambiar a logs
+    document.querySelectorAll("button").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    sessionStorage.setItem("dmzSelected", btn.id);
+    
+    // Cambiar iframe a logs.html inmediatamente
+    const iframe = parent.frames['body'];
+    iframe.location.href = '/web/dmz/logs.html';
+    
+    // Ejecutar la acción en el backend
+    try {
+        const response = await fetch('/admin/dmz', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({ action: action, params: {} })
+        });
+        
+        const data = await response.json();
+        if (!response.ok) {
+            console.error('Error ejecutando acción:', data.detail || 'Error desconocido');
+        }
+    } catch (err) {
+        console.error('Error en executeAction:', err);
+    }
+}
+
+// Restaurar el botón seleccionado al cargar la página
+window.onload = function() {
+    const selected = sessionStorage.getItem("dmzSelected");
+    if (selected) {
+        const btn = document.getElementById(selected);
+        if (btn) btn.classList.add("selected");
+    }
+};
+</script>
+
+</body>
+</html>

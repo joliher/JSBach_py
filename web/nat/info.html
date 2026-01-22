@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>NAT - Manual de Uso</title>
+    <style>
+        html, body { 
+            margin: 0; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px; 
+            background: linear-gradient(135deg, #43e97b 0%, #38f9d7 100%);
+            min-height: 100vh;
+        }
+        .info-container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        h2 {
+            color: #333;
+            margin-top: 0;
+            font-size: 28px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        h3 {
+            color: #43e97b;
+            margin-top: 25px;
+            font-size: 20px;
+        }
+        p {
+            color: #666;
+            line-height: 1.8;
+            font-size: 15px;
+        }
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        .feature-list li {
+            padding: 10px 0;
+            padding-left: 30px;
+            position: relative;
+            color: #555;
+            line-height: 1.6;
+        }
+        .feature-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #43e97b;
+            font-weight: bold;
+            font-size: 18px;
+        }
+        .action-box {
+            background: #f7fafc;
+            padding: 15px;
+            border-left: 4px solid #43e97b;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .action-box strong {
+            color: #43e97b;
+            font-size: 16px;
+        }
+        .action-box p {
+            margin: 5px 0;
+            color: #555;
+        }
+        .tip {
+            background: #e7f3ff;
+            padding: 15px;
+            border-left: 4px solid #2196F3;
+            margin-top: 20px;
+            border-radius: 4px;
+        }
+        .tip strong {
+            color: #0d47a1;
+        }
+        code {
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', monospace;
+            color: #d63384;
+        }
+    </style>
+</head>
+<body>
+    <div class="info-container">
+        <h2>🔀 Módulo NAT - Manual de Uso</h2>
+        <p>
+            El módulo NAT (Network Address Translation) permite que dispositivos en redes internas 
+            accedan a Internet compartiendo la IP pública del router mediante masquerading.
+        </p>
+        
+        <h3>Funcionalidades:</h3>
+        <ul class="feature-list">
+            <li><strong>Masquerading:</strong> Traduce IPs privadas a la IP pública de la interfaz WAN</li>
+            <li><strong>IPv4 Forwarding:</strong> Habilita reenvío de paquetes entre interfaces</li>
+            <li><strong>Configuración flexible:</strong> Define interfaz WAN e interna desde JSON</li>
+            <li><strong>Reglas iptables:</strong> Gestión automática de reglas en POSTROUTING</li>
+            <li><strong>Logs completos:</strong> Registro de activación, desactivación y errores</li>
+        </ul>
+
+        <h3>Botones de Acción:</h3>
+        
+        <div class="action-box">
+            <strong>🚀 NAT START</strong>
+            <p>Activa NAT masquerading. Habilita <code>net.ipv4.ip_forward=1</code> en sysctl y añade regla iptables <code>-t nat -A POSTROUTING -o WAN_IF -j MASQUERADE</code>. Permite que redes internas accedan a Internet.</p>
+        </div>
+
+        <div class="action-box">
+            <strong>🛑 NAT STOP</strong>
+            <p>Desactiva NAT. Elimina reglas de masquerading de iptables y opcionalmente deshabilita el reenvío IP. Todo tráfico interno queda sin acceso a Internet hasta reactivar.</p>
+        </div>
+
+        <div class="action-box">
+            <strong>🔄 NAT RESTART</strong>
+            <p>Reinicia NAT. Ejecuta STOP seguido de START. Útil tras cambiar interfaz WAN o aplicar nueva configuración.</p>
+        </div>
+
+        <div class="action-box">
+            <strong>📊 NAT STATUS</strong>
+            <p>Muestra estado de NAT: activo/inactivo, interfaz WAN configurada, interfaz interna, estado de IP forwarding (<code>cat /proc/sys/net/ipv4/ip_forward</code>), y reglas activas en tabla NAT de iptables.</p>
+        </div>
+
+        <div class="action-box">
+            <strong>⚙️ NAT CONFIG</strong>
+            <p>Permite configurar interfaz WAN y opcionalmente interfaz interna. La configuración se guarda en <code>config/nat/nat.json</code> y persiste entre reinicios. Debe hacer RESTART para aplicar cambios.</p>
+        </div>
+
+
+        <div class="tip">
+            <strong>💡 Consejo:</strong> 
+            Asegúrese de que la interfaz WAN esté activa antes de iniciar NAT. Verifique con WAN STATUS. 
+            NAT debe estar activo para que las VLANs tengan acceso a Internet.
+        </div>
+    </div>
+</body>
+</html>

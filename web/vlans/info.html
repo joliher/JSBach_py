@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>VLANs - Manual de Uso</title>
+    <style>
+        html, body { 
+            margin: 0; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px; 
+            background: linear-gradient(135deg, #fa709a 0%, #fee140 100%);
+            min-height: 100vh;
+        }
+        .info-container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        h2 {
+            color: #333;
+            margin-top: 0;
+            font-size: 28px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        h3 {
+            color: #fa709a;
+            margin-top: 25px;
+            font-size: 20px;
+        }
+        p {
+            color: #666;
+            line-height: 1.8;
+            font-size: 15px;
+        }
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        .feature-list li {
+            padding: 10px 0;
+            padding-left: 30px;
+            position: relative;
+            color: #555;
+            line-height: 1.6;
+        }
+        .feature-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #fa709a;
+            font-weight: bold;
+            font-size: 18px;
+        }
+        .action-box {
+            background: #f7fafc;
+            padding: 15px;
+            border-left: 4px solid #fa709a;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .action-box strong {
+            color: #fa709a;
+            font-size: 16px;
+        }
+        .action-box p {
+            margin: 5px 0;
+            color: #555;
+        }
+        .tip {
+            background: #fff3cd;
+            padding: 15px;
+            border-left: 4px solid #ffc107;
+            margin-top: 20px;
+            border-radius: 4px;
+        }
+        .tip strong {
+            color: #856404;
+        }
+        code {
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', monospace;
+            color: #d63384;
+        }
+    </style>
+</head>
+<body>
+    <div class="info-container">
+        <h2>🔷 Módulo VLANs - Manual de Uso</h2>
+        <p>
+            El módulo VLANs gestiona la segmentación de la red en subredes virtuales independientes, 
+            cada una con su propio dominio de broadcast y configuración IP.
+        </p>
+        
+        <h3>Funcionalidades:</h3>
+        <ul class="feature-list">
+            <li><strong>Creación de VLANs:</strong> Define ID, nombre y subred IP para cada VLAN</li>
+            <li><strong>Bridge Management:</strong> Gestión automática del bridge <code>jsbach-br</code></li>
+            <li><strong>Subinterfaces:</strong> Crea interfaces <code>jsbach-br.ID</code> automáticamente</li>
+            <li><strong>VLANs protegidas:</strong> VLAN 1 y 2 no se pueden eliminar (sistema)</li>
+            <li><strong>Validación CIDR:</strong> Impide usar .0 o .255 como IP del router</li>
+        </ul>
+
+        <h3>Botones de Acción:</h3>
+        
+        <div class="action-box">
+            <strong>🚀 VLANS START</strong>
+            <p>Activa todas las VLANs configuradas. Crea el bridge <code>jsbach-br</code>, genera subinterfaces <code>jsbach-br.ID</code>, asigna IPs y levanta las interfaces. Las VLANs 1 y 2 siempre se inicializan por defecto.</p>
+        </div>
+
+        <div class="action-box">
+            <strong>🛑 VLANS STOP</strong>
+            <p>Detiene todas las VLANs. Baja interfaces, elimina IPs y destruye el bridge. Las configuraciones se mantienen en JSON para próximo inicio.</p>
+        </div>
+
+        <div class="action-box">
+            <strong>🔄 VLANS RESTART</strong>
+            <p>Reinicia todas las VLANs. Ejecuta STOP seguido de START. Útil tras añadir nuevas VLANs o modificar IPs.</p>
+        </div>
+
+        <div class="action-box">
+            <strong>📊 VLANS STATUS</strong>
+            <p>Muestra estado del bridge (<code>ip link show jsbach-br</code>), lista de VLANs configuradas con sus IPs, estado de cada subinterfaz y configuración actual desde JSON.</p>
+        </div>
+
+        <div class="action-box">
+            <strong>⚙️ VLANS CONFIG</strong>
+            <p>Interfaz para gestionar VLANs. Permite añadir nuevas VLANs (ID, nombre, IP/CIDR obligatorios) y eliminar existentes (excepto 1 y 2). Tabla editable muestra todas las VLANs con opción de borrado. Valida que IP no termine en .0 o .255.</p>
+        </div>
+
+
+        <div class="tip">
+            <strong>⚠️ Importante:</strong> 
+            Las VLANs 1 y 2 están protegidas y no se pueden eliminar. Asegúrese de usar IPs válidas en formato CIDR 
+            (ej: <code>192.168.10.1/24</code>) evitando .0 y .255 como dirección del router.
+        </div>
+    </div>
+</body>
+</html>

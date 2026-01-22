@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>CONFIG TAGGING</title>
+    <style>
+        html, body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+        h2 {
+            color: #333;
+            margin-top: 0;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+        h3 {
+            color: #495057;
+            margin-top: 25px;
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+        .info-box {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #0c5460;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e9ecef;
+        }
+        th {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 13px;
+            letter-spacing: 0.5px;
+        }
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-right: 5px;
+        }
+        button:hover {
+            transform: translateY(-2px);
+        }
+        .btn-edit {
+            background: #6c757d;
+            color: white;
+        }
+        .btn-edit:hover {
+            background: #5a6268;
+            box-shadow: 0 4px 12px rgba(108, 117, 125, 0.4);
+        }
+        .btn-delete {
+            background: #dc3545;
+            color: white;
+        }
+        .btn-delete:hover {
+            background: #c82333;
+            box-shadow: 0 4px 12px rgba(220, 53, 69, 0.4);
+        }
+        .btn-save {
+            background: #28a745;
+            color: white;
+        }
+        .btn-save:hover {
+            background: #218838;
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+        }
+        .btn-cancel {
+            background: #ffc107;
+            color: #212529;
+        }
+        .btn-cancel:hover {
+            background: #e0a800;
+            box-shadow: 0 4px 12px rgba(255, 193, 7, 0.4);
+        }
+        input[type="text"], input[type="number"] {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ced4da;
+            border-radius: 6px;
+            font-size: 14px;
+            box-sizing: border-box;
+            transition: border-color 0.3s;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        .form-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        .submit-btn {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 10px;
+        }
+        .submit-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        #output {
+            margin-top: 20px;
+            padding: 15px;
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            white-space: pre-wrap;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            color: #495057;
+        }
+        small {
+            color: #6c757d;
+            display: block;
+            margin-top: 5px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🏷️ Configuración de VLAN Tagging</h2>
+
+        <div class="info-box">
+            <strong>ℹ️ Información:</strong> Configure las interfaces del bridge y sus etiquetas VLAN.
+            VLAN Untag permite tráfico sin etiquetar, mientras que VLAN Tag permite múltiples VLANs etiquetadas (separadas por comas).
+        </div>
+
+        <h3>Interfaces configuradas</h3>
+
+        <table id="taggingTable">
+            <thead>
+                <tr>
+                    <th>Interface</th>
+                    <th>VLAN Untag</th>
+                    <th>VLAN Tag</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+
+        <h3>Nueva Interface</h3>
+
+        <div class="form-section">
+            <form id="taggingForm">
+                <div class="form-group">
+                    <label>Nombre de la interface</label>
+                    <input type="text" name="name" placeholder="eth1" required>
+                    <small>💡 Ejemplo: eth0, eth1, enp0s8, etc.</small>
+                </div>
+
+                <div class="form-group">
+                    <label>VLAN Untag</label>
+                    <input type="text" name="vlan_untag" placeholder="10">
+                    <small>💡 ID de VLAN para tráfico sin etiquetar (opcional)</small>
+                </div>
+
+                <div class="form-group">
+                    <label>VLAN Tag</label>
+                    <input type="text" name="vlan_tag" placeholder="20,30,40">
+                    <small>💡 IDs de VLAN separados por comas para tráfico etiquetado (opcional)</small>
+                </div>
+
+                <button type="submit" class="submit-btn">Guardar Interface</button>
+            </form>
+        </div>
+
+        <pre id="output"></pre>
+    </div>
+
+<script>
+let taggingCache = {};
+
+async function loadTagging() {
+    try {
+        const response = await fetch("/admin/tagging", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+                action: "config",
+                params: { action: "show" }
+            })
+        });
+
+        const data = await response.json();
+        
+        if (!response.ok) {
+            document.getElementById("output").textContent = data.detail || "Error cargando interfaces";
+            return;
+        }
+
+        // Parsear interfaces del mensaje
+        const interfaces = [];
+        const lines = data.message.split('\n');
+        for (let line of lines) {
+            const match = line.match(/Name:\s*([^,]+),\s*UNTAG:\s*([^,]*),\s*TAG:\s*(.*)/);
+            if (match) {
+                interfaces.push({
+                    name: match[1].trim(),
+                    vlan_untag: match[2].trim(),
+                    vlan_tag: match[3].trim()
+                });
+            }
+        }
+
+        const tbody = document.querySelector("#taggingTable tbody");
+        tbody.innerHTML = "";
+        taggingCache = {};
+
+        if (interfaces.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="4">(No hay interfaces configuradas)</td>
+                </tr>
+            `;
+            document.getElementById("output").textContent = "";
+            return;
+        }
+
+        // Ordenar por nombre de interface
+        interfaces.sort((a, b) => a.name.localeCompare(b.name));
+
+        interfaces.forEach(iface => {
+            if (!iface.name) return;
+            taggingCache[iface.name] = iface;
+
+            const tr = document.createElement("tr");
+            tr.dataset.name = iface.name;
+
+            tr.innerHTML = `
+                <td>${iface.name}</td>
+                <td>${iface.vlan_untag || ""}</td>
+                <td>${iface.vlan_tag || ""}</td>
+                <td>
+                    <button class="btn-edit" onclick="editRow('${iface.name}')">Modificar</button>
+                    <button class="btn-delete" onclick="deleteIface('${iface.name}')">Eliminar</button>
+                </td>
+            `;
+
+            tbody.appendChild(tr);
+        });
+
+        document.getElementById("output").textContent = "";
+
+    } catch (err) {
+        document.getElementById("output").textContent = "Error: " + err.message;
+    }
+}
+
+function editRow(name) {
+    const tr = document.querySelector(`tr[data-name="${name}"]`);
+    const iface = taggingCache[name];
+
+    tr.innerHTML = `
+        <td>${iface.name}</td>
+        <td><input type="text" value="${iface.vlan_untag || ""}"></td>
+        <td><input type="text" value="${iface.vlan_tag || ""}"></td>
+        <td>
+            <button class="btn-save" onclick="saveRow('${name}')">Guardar</button>
+            <button class="btn-cancel" onclick="cancelEdit()">Cancelar</button>
+        </td>
+    `;
+}
+
+async function saveRow(name) {
+    const tr = document.querySelector(`tr[data-name="${name}"]`);
+    const inputs = tr.querySelectorAll("input");
+    let [vlan_untag, vlan_tag] = Array.from(inputs).map(i => i.value.trim());
+
+    vlan_untag = vlan_untag === "" ? "" : vlan_untag;
+    vlan_tag = vlan_tag === "" ? "" : vlan_tag;
+
+    try {
+        const response = await fetch("/admin/tagging", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+                action: "config",
+                params: {
+                    action: "add",
+                    name: name,
+                    vlan_untag: vlan_untag,
+                    vlan_tag: vlan_tag
+                }
+            })
+        });
+
+        const data = await response.json();
+        document.getElementById("output").textContent = data.message || data.detail;
+        loadTagging();
+
+    } catch (err) {
+        document.getElementById("output").textContent = "Error: " + err.message;
+    }
+}
+
+function cancelEdit() {
+    loadTagging();
+}
+
+async function deleteIface(name) {
+    if (!confirm(`¿Eliminar interface ${name}?`)) return;
+
+    try {
+        const response = await fetch("/admin/tagging", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+                action: "config",
+                params: {
+                    action: "remove",
+                    name: name
+                }
+            })
+        });
+
+        const data = await response.json();
+        document.getElementById("output").textContent = data.message || data.detail;
+        loadTagging();
+
+    } catch (err) {
+        document.getElementById("output").textContent = "Error: " + err.message;
+    }
+}
+
+document.getElementById("taggingForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+
+    const form = e.target;
+    let vlan_untag = form.vlan_untag.value.trim();
+    let vlan_tag = form.vlan_tag.value.trim();
+
+    vlan_untag = vlan_untag === "" ? "" : vlan_untag;
+    vlan_tag = vlan_tag === "" ? "" : vlan_tag;
+
+    try {
+        const response = await fetch("/admin/tagging", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({
+                action: "config",
+                params: {
+                    action: "add",
+                    name: form.name.value,
+                    vlan_untag: vlan_untag,
+                    vlan_tag: vlan_tag
+                }
+            })
+        });
+
+        const data = await response.json();
+        document.getElementById("output").textContent = data.message || data.detail;
+
+        form.reset();
+        loadTagging();
+
+    } catch (err) {
+        document.getElementById("output").textContent = "Error: " + err.message;
+    }
+});
+
+loadTagging();
+</script>
+
+</body>
+</html>

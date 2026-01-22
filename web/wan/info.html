@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>WAN - Manual de Uso</title>
+    <style>
+        html, body { 
+            margin: 0; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px; 
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            min-height: 100vh;
+        }
+        .info-container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        h2 {
+            color: #333;
+            margin-top: 0;
+            font-size: 28px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        h3 {
+            color: #4facfe;
+            margin-top: 25px;
+            font-size: 20px;
+        }
+        p {
+            color: #666;
+            line-height: 1.8;
+            font-size: 15px;
+        }
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        .feature-list li {
+            padding: 10px 0;
+            padding-left: 30px;
+            position: relative;
+            color: #555;
+            line-height: 1.6;
+        }
+        .feature-list li:before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #4facfe;
+            font-weight: bold;
+            font-size: 18px;
+        }
+        .action-box {
+            background: #f7fafc;
+            padding: 15px;
+            border-left: 4px solid #4facfe;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .action-box strong {
+            color: #4facfe;
+            font-size: 16px;
+        }
+        .action-box p {
+            margin: 5px 0;
+            color: #555;
+        }
+        .tip {
+            background: #e7f3ff;
+            padding: 15px;
+            border-left: 4px solid #2196F3;
+            margin-top: 20px;
+            border-radius: 4px;
+        }
+        .tip strong {
+            color: #0d47a1;
+        }
+        code {
+            background: #f0f0f0;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', monospace;
+            color: #d63384;
+        }
+    </style>
+</head>
+<body>
+    <div class="info-container">
+        <h2>🌐 Módulo WAN - Manual de Uso</h2>
+        <p>
+            El módulo WAN gestiona la interfaz de red externa del router, permitiendo configurar 
+            la conexión a Internet mediante DHCP o IP estática.
+        </p>
+        
+        <h3>Funcionalidades:</h3>
+        <ul class="feature-list">
+            <li><strong>Modo DHCP:</strong> Obtención automática de configuración de red desde el ISP</li>
+            <li><strong>Modo Manual:</strong> Configuración manual de IP, Gateway y DNS</li>
+            <li><strong>Gestión de DNS:</strong> Configuración de hasta 2 servidores DNS</li>
+            <li><strong>Persistencia:</strong> Configuración guardada automáticamente en JSON</li>
+            <li><strong>Logs detallados:</strong> Registro de todas las operaciones realizadas</li>
+        </ul>
+
+        <h3>Botones de Acción:</h3>
+        
+        <div class="action-box">
+            <strong>🚀 WAN START</strong>
+            <p>Inicia la interfaz WAN. En modo DHCP ejecuta <code>dhcpcd</code>, en modo manual configura IP estática con <code>ip addr</code> y <code>ip route</code>. Configura DNS en <code>/etc/resolv.conf</code>.</p>
+        </div>
+
+        <div class="action-box">
+            <strong>🛑 WAN STOP</strong>
+            <p>Detiene la interfaz WAN. Elimina la IP configurada y la ruta por defecto. Mata el proceso <code>dhcpcd</code> si está activo.</p>
+        </div>
+
+        <div class="action-box">
+            <strong>🔄 WAN RESTART</strong>
+            <p>Reinicia la interfaz WAN. Ejecuta STOP seguido de START. Útil para aplicar cambios de configuración sin reiniciar el sistema.</p>
+        </div>
+
+        <div class="action-box">
+            <strong>📊 WAN STATUS</strong>
+            <p>Muestra el estado actual: interfaz configurada, modo (DHCP/Manual), IP asignada, gateway, DNS, y métricas de paquetes recibidos/transmitidos.</p>
+        </div>
+
+        <div class="action-box">
+            <strong>⚙️ WAN CONFIG</strong>
+            <p>Interfaz para modificar la configuración WAN. Permite seleccionar modo DHCP o Manual, especificar interfaz, y en modo manual introducir IP/CIDR, gateway y hasta 2 DNS. Valida formato de IPs antes de guardar.</p>
+        </div>
+
+
+        <div class="tip">
+            <strong>💡 Consejo:</strong> 
+            Use modo DHCP para conexiones domésticas simples. Modo manual es ideal para entornos empresariales 
+            o cuando necesite IPs estáticas. Recuerde hacer RESTART tras cambiar la configuración.
+        </div>
+    </div>
+</body>
+</html>

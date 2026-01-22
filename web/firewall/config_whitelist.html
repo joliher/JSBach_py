@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Configuración de Whitelist</title>
+    <style>
+        html, body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+        h2 {
+            color: #333;
+            margin-top: 0;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-size: 18px;
+        }
+        .vlan-card {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            margin: 15px 0;
+            padding: 20px;
+            transition: all 0.3s;
+        }
+        .vlan-card:hover {
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .vlan-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #dee2e6;
+        }
+        .vlan-title {
+            font-size: 18px;
+            font-weight: bold;
+            color: #333;
+        }
+        .vlan-info {
+            font-size: 14px;
+            color: #666;
+            margin-top: 5px;
+        }
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .toggle-switch {
+            position: relative;
+            width: 60px;
+            height: 30px;
+            background: #ccc;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .toggle-switch.active {
+            background: #28a745;
+        }
+        .toggle-switch::after {
+            content: '';
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: white;
+            top: 3px;
+            left: 3px;
+            transition: left 0.3s;
+        }
+        .toggle-switch.active::after {
+            left: 33px;
+        }
+        .toggle-label {
+            font-weight: bold;
+            color: #666;
+        }
+        .toggle-label.active {
+            color: #28a745;
+        }
+        .whitelist-section {
+            margin-top: 15px;
+            padding: 15px;
+            background: white;
+            border-radius: 6px;
+            border: 1px solid #e0e0e0;
+        }
+        .whitelist-section.disabled {
+            opacity: 0.5;
+            pointer-events: none;
+        }
+        .rules-list {
+            margin: 15px 0;
+        }
+        .rule-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            margin: 5px 0;
+            background: #f0f0f0;
+            border-radius: 4px;
+            border-left: 4px solid #667eea;
+        }
+        .rule-text {
+            font-family: 'Courier New', monospace;
+            color: #333;
+            font-size: 14px;
+        }
+        .btn-remove {
+            background: #dc3545;
+            color: white;
+            border: none;
+            padding: 5px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        .btn-remove:hover {
+            background: #c82333;
+        }
+        .add-rule-form {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 2px solid #e0e0e0;
+        }
+        .add-rule-form input {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .btn-add {
+            background: #28a745;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.2s;
+        }
+        .btn-add:hover {
+            background: #218838;
+        }
+        .no-rules {
+            text-align: center;
+            padding: 20px;
+            color: #999;
+            font-style: italic;
+        }
+        .info-box {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #0c5460;
+        }
+        .warning-box {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+            padding: 15px;
+            margin-top: 15px;
+            color: #856404;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status-enabled {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-disabled {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🔐 Configuración de Whitelist por VLAN</h2>
+        
+        <div class="info-box">
+            <strong>ℹ️ Información:</strong> La whitelist permite bloquear todo el tráfico excepto los destinos permitidos.<br>
+            <strong>Formatos soportados:</strong>
+            <ul style="margin: 8px 0 0 20px; line-height: 1.6;">
+                <li><code>IP</code> - Ejemplo: <code>8.8.8.8</code></li>
+                <li><code>IP/proto</code> - Ejemplo: <code>8.8.8.8/tcp</code> o <code>8.8.8.8/udp</code></li>
+                <li><code>IP:puerto</code> - Ejemplo: <code>192.168.1.1:80</code> (TCP+UDP)</li>
+                <li><code>IP:puerto/proto</code> - Ejemplo: <code>8.8.8.8:53/udp</code></li>
+                <li><code>:puerto</code> - Ejemplo: <code>:443</code> (cualquier IP, TCP+UDP)</li>
+                <li><code>:puerto/proto</code> - Ejemplo: <code>:22/tcp</code></li>
+            </ul>
+        </div>
+
+        <div id="content" class="loading">
+            Cargando configuración...
+        </div>
+    </div>
+
+    <script>
+        let firewallConfig = {};
+
+        async function loadConfig() {
+            console.log('=== Iniciando loadConfig ===');
+            try {
+                console.log('Haciendo fetch a /config/firewall/firewall.json');
+                const response = await fetch('/config/firewall/firewall.json', {
+                    credentials: 'include'
+                });
+                
+                console.log('Response status:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error('No se pudo cargar la configuración');
+                }
+
+                firewallConfig = await response.json();
+                console.log('Config cargada:', firewallConfig);
+                
+                // Verificar si el firewall está activo
+                if (firewallConfig.status === 0 || !firewallConfig.vlans || Object.keys(firewallConfig.vlans).length === 0) {
+                    document.getElementById('content').innerHTML = `
+                        <div class="warning-box" style="text-align: center; padding: 40px;">
+                            <h3 style="color: #856404; margin-top: 0;">⚠️ Firewall Inactivo</h3>
+                            <p style="font-size: 16px; margin: 20px 0;">
+                                Debes activar el FIREWALL antes de poder configurarlo.
+                            </p>
+                            <p style="color: #666;">
+                                Por favor, ve al menú principal y haz clic en <strong>START</strong> para iniciar el firewall.
+                            </p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                console.log('Llamando a renderVLANs()...');
+                renderVLANs();
+            } catch (error) {
+                console.error('Error cargando configuración:', error);
+                document.getElementById('content').innerHTML = `
+                    <div class="warning-box">
+                        ⚠️ Error al cargar configuración. Asegúrese de que el firewall esté iniciado (START).
+                    </div>
+                `;
+            }
+        }
+
+        function renderVLANs() {
+            console.log('=== Iniciando renderVLANs ===');
+            const vlans = firewallConfig.vlans || {};
+            let vlanIds = Object.keys(vlans);
+            console.log('VLANs encontradas:', vlanIds);
+            
+            // Separar VLANs especiales (1 y 2) de las normales
+            const specialVlanIds = vlanIds.filter(id => id == 1 || id == 2).sort((a, b) => parseInt(a) - parseInt(b));
+            const normalVlanIds = vlanIds.filter(id => id != 1 && id != 2).sort((a, b) => parseInt(a) - parseInt(b));
+            console.log('VLANs especiales:', specialVlanIds);
+            console.log('VLANs normales:', normalVlanIds);
+
+            if (vlanIds.length === 0) {
+                document.getElementById('content').innerHTML = `
+                    <div class="warning-box">
+                        ⚠️ No hay VLANs configuradas. Ejecute START en el firewall primero.
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            
+            // Renderizar VLANs especiales (solo aislamiento)
+            if (specialVlanIds.length > 0) {
+                console.log('Renderizando VLANs especiales...');
+                html += '<h3 style="color: #667eea; margin-top: 0;">🔐 VLANs Especiales (Solo Aislamiento)</h3>';
+                
+                specialVlanIds.forEach(vlanId => {
+                    const vlan = vlans[vlanId];
+                    const isolated = vlan.isolated || false;
+                    const isVlan1 = (vlanId == 1);
+
+                    html += `
+                        <div class="vlan-card" id="vlan-${vlanId}" style="border-left: 4px solid ${isVlan1 ? '#c0392b' : '#e74c3c'};">
+                            <div class="vlan-header">
+                                <div>
+                                    <div class="vlan-title">
+                                        VLAN ${vlanId}: ${vlan.name || 'Sin nombre'}
+                                        <span class="status-badge ${isolated ? 'status-disabled' : 'status-enabled'}">
+                                            ${isolated ? '🚫 AISLADA' : '✅ ACTIVA'}
+                                        </span>
+                                    </div>
+                                    <div class="vlan-info">
+                                        IP: ${vlan.ip || 'N/A'} | Estado: ${vlan.enabled ? 'Activa' : 'Inactiva'}
+                                    </div>
+                                </div>
+                                <div>
+                                    ${isVlan1 ? `
+                                        <span style="color: #999; font-style: italic; margin-right: 10px;">
+                                            Siempre aislada
+                                        </span>
+                                    ` : `
+                                        <button class="btn-add" 
+                                                onclick="toggleIsolation(${vlanId}, ${isolated})"
+                                                style="margin-right: 10px; ${isolated ? 'background: #28a745;' : 'background: #dc3545;'}">
+                                            ${isolated ? '🔓 Desaislar' : '🔒 Aislar'}
+                                        </button>
+                                    `}
+                                </div>
+                            </div>
+                            
+                            <div class="${isVlan1 ? 'warning-box' : 'info-box'}" style="margin-top: 15px;">
+                                <strong>${isVlan1 ? '⚠️' : 'ℹ️'} VLAN ${vlanId}:</strong> 
+                                ${isVlan1 
+                                    ? 'Esta VLAN está siempre aislada cuando el firewall está activo. Bloquea tráfico ENTRANTE (desde fuera hacia VLAN 1), pero permite tráfico SALIENTE (desde VLAN 1 hacia fuera). No permite configuración de whitelist.'
+                                    : 'Esta VLAN no permite configuración de whitelist. Solo puede ser aislada o desaislada para bloquear/permitir nuevas conexiones salientes.'
+                                }
+                            </div>
+                        </div>
+                    `;
+                });
+                
+                if (normalVlanIds.length > 0) {
+                    html += '<h3 style="color: #667eea; margin-top: 30px;">🔥 VLANs Normales (Whitelist)</h3>';
+                }
+            }
+
+            // Renderizar VLANs normales (whitelist)
+            console.log('Renderizando VLANs normales...');
+            normalVlanIds.forEach(vlanId => {
+                const vlan = vlans[vlanId];
+                const enabled = vlan.whitelist_enabled || false;
+                const isolated = vlan.isolated || false;
+                const whitelist = vlan.whitelist || [];
+
+                html += `
+                    <div class="vlan-card" id="vlan-${vlanId}">
+                        <div class="vlan-header">
+                            <div>
+                                <div class="vlan-title">
+                                    VLAN ${vlanId}: ${vlan.name || 'Sin nombre'}
+                                    <span class="status-badge ${enabled ? 'status-enabled' : 'status-disabled'}">
+                                        ${enabled ? '🔒 WHITELIST ACTIVA' : '🔓 WHITELIST INACTIVA'}
+                                    </span>
+                                    ${isolated ? '<span class="status-badge status-inactive" style="margin-left: 5px;">🚫 AISLADA</span>' : ''}
+                                </div>
+                                <div class="vlan-info">
+                                    IP: ${vlan.ip || 'N/A'} | Estado: ${vlan.enabled ? 'Activa' : 'Inactiva'}
+                                </div>
+                            </div>
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <button class="btn-add" 
+                                        onclick="toggleIsolation(${vlanId}, ${isolated})"
+                                        style="${isolated ? 'background: #28a745;' : 'background: #dc3545;'}">
+                                    ${isolated ? '🔓 Desaislar' : '🔒 Aislar'}
+                                </button>
+                                <div class="toggle-container">
+                                    <span class="toggle-label ${enabled ? 'active' : ''}">
+                                        ${enabled ? 'HABILITADA' : 'DESHABILITADA'}
+                                    </span>
+                                    <div class="toggle-switch ${enabled ? 'active' : ''}" 
+                                         onclick="toggleWhitelist(${vlanId})">
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="whitelist-section ${enabled ? '' : 'disabled'}">
+                            <h4 style="margin-top: 0; color: #555;">📋 Reglas de Whitelist</h4>
+                            
+                            <div class="rules-list" id="rules-${vlanId}">
+                                ${whitelist.length === 0 
+                                    ? '<div class="no-rules">No hay reglas configuradas</div>'
+                                    : whitelist.map((rule, idx) => `
+                                        <div class="rule-item">
+                                            <span class="rule-text">${rule}</span>
+                                            <button class="btn-remove" onclick="removeRule(${vlanId}, '${rule}')">
+                                                🗑️ Eliminar
+                                            </button>
+                                        </div>
+                                    `).join('')
+                                }
+                            </div>
+
+                            <div class="add-rule-form">
+                                <input type="text" 
+                                       id="newRule-${vlanId}" 
+                                       placeholder="Ej: 8.8.8.8, :443, 8.8.8.8:53/udp"
+                                       onkeypress="if(event.key==='Enter') addRule(${vlanId})">
+                                <button class="btn-add" onclick="addRule(${vlanId})">
+                                    ➕ Agregar Regla
+                                </button>
+                            </div>
+                        </div>
+
+                        ${enabled ? `
+                            <div class="warning-box">
+                                ⚠️ <strong>Atención:</strong> Con whitelist activa, solo se permite tráfico a los destinos listados. 
+                                Todo lo demás será bloqueado (DROP).
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            });
+
+            console.log('HTML generado, longitud:', html.length);
+            console.log('Actualizando DOM...');
+            document.getElementById('content').innerHTML = html;
+            console.log('=== renderVLANs completado ===');
+        }
+
+        async function toggleWhitelist(vlanId) {
+            const vlan = firewallConfig.vlans[vlanId];
+            const currentState = vlan.whitelist_enabled || false;
+            const action = currentState ? 'disable_whitelist' : 'enable_whitelist';
+
+            console.log(`Toggling whitelist for VLAN ${vlanId}: ${action}`);
+
+            try {
+                const response = await fetch('/admin/firewall', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        action: action,
+                        params: {
+                            vlan_id: parseInt(vlanId),
+                            whitelist: vlan.whitelist || []
+                        }
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    firewallConfig.vlans[vlanId].whitelist_enabled = !currentState;
+                    renderVLANs();
+                    console.log('Whitelist toggled successfully');
+                } else {
+                    alert('Error: ' + (result.message || 'No se pudo cambiar el estado'));
+                }
+            } catch (error) {
+                console.error('Error toggling whitelist:', error);
+                alert('Error de conexión al servidor');
+            }
+        }
+
+        async function addRule(vlanId) {
+            const input = document.getElementById(`newRule-${vlanId}`);
+            const rule = input.value.trim();
+
+            if (!rule) {
+                alert('Por favor ingrese una regla válida');
+                return;
+            }
+
+            // Validar formatos:
+            // IP: 8.8.8.8
+            // IP/proto: 8.8.8.8/tcp, 8.8.8.8/udp
+            // IP:puerto: 192.168.1.1:80
+            // IP:puerto/proto: 8.8.8.8:53/udp
+            // :puerto: :443
+            // :puerto/proto: :22/tcp
+            const validPattern = /^((\d{1,3}\.){3}\d{1,3}(:\d+)?(\/(?:tcp|udp))?|:\d+(\/(?:tcp|udp))?)$/;
+            if (!validPattern.test(rule)) {
+                alert('Formato inválido. Ejemplos válidos:\n' +
+                      '- IP: 8.8.8.8\n' +
+                      '- IP/proto: 8.8.8.8/tcp\n' +
+                      '- IP:puerto: 192.168.1.1:80\n' +
+                      '- IP:puerto/proto: 8.8.8.8:53/udp\n' +
+                      '- :puerto: :443\n' +
+                      '- :puerto/proto: :22/tcp');
+                return;
+            }
+
+            console.log(`Adding rule "${rule}" to VLAN ${vlanId}`);
+
+            try {
+                const response = await fetch('/admin/firewall', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        action: 'add_rule',
+                        params: {
+                            vlan_id: parseInt(vlanId),
+                            rule: rule
+                        }
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    if (!firewallConfig.vlans[vlanId].whitelist) {
+                        firewallConfig.vlans[vlanId].whitelist = [];
+                    }
+                    firewallConfig.vlans[vlanId].whitelist.push(rule);
+                    
+                    input.value = '';
+                    renderVLANs();
+                    console.log('Rule added successfully');
+                } else {
+                    alert('Error: ' + (result.message || 'No se pudo agregar la regla'));
+                }
+            } catch (error) {
+                console.error('Error adding rule:', error);
+                alert('Error de conexión al servidor');
+            }
+        }
+
+        async function removeRule(vlanId, rule) {
+            if (!confirm(`¿Eliminar la regla "${rule}"?`)) {
+                return;
+            }
+
+            console.log(`Removing rule "${rule}" from VLAN ${vlanId}`);
+
+            try {
+                const response = await fetch('/admin/firewall', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        action: 'remove_rule',
+                        params: {
+                            vlan_id: parseInt(vlanId),
+                            rule: rule
+                        }
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    const idx = firewallConfig.vlans[vlanId].whitelist.indexOf(rule);
+                    if (idx > -1) {
+                        firewallConfig.vlans[vlanId].whitelist.splice(idx, 1);
+                    }
+                    
+                    renderVLANs();
+                    console.log('Rule removed successfully');
+                } else {
+                    alert('Error: ' + (result.message || 'No se pudo eliminar la regla'));
+                }
+            } catch (error) {
+                console.error('Error removing rule:', error);
+                alert('Error de conexión al servidor');
+            }
+        }
+
+        async function toggleIsolation(vlanId, currentlyIsolated) {
+            const action = currentlyIsolated ? 'desaislar' : 'aislar';
+            const actionText = currentlyIsolated ? 'desaislar' : 'aislar';
+            
+            if (!confirm(`¿Está seguro de ${actionText} la VLAN ${vlanId}?`)) {
+                return;
+            }
+
+            console.log(`${action} VLAN ${vlanId}`);
+
+            try {
+                const response = await fetch('/admin/firewall', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        action: action,
+                        params: {
+                            vlan_id: parseInt(vlanId)
+                        }
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    firewallConfig.vlans[vlanId].isolated = !currentlyIsolated;
+                    renderVLANs();
+                    alert(result.message || `VLAN ${vlanId} ${actionText}da correctamente`);
+                    console.log(`VLAN ${vlanId} ${actionText}da successfully`);
+                } else {
+                    alert('Error: ' + (result.message || `No se pudo ${actionText} la VLAN`));
+                }
+            } catch (error) {
+                console.error(`Error ${actionText}ndo VLAN:`, error);
+                alert('Error de conexión al servidor');
+            }
+        }
+
+        console.log('Script cargado, esperando DOMContentLoaded...');
+        window.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM cargado, ejecutando loadConfig()');
+            loadConfig();
+        });
+    </script>
+</body>
+</html>
+

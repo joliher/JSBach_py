@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>NAT - Menú</title>
+    <style>
+        html, body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            padding: 10px;
+            background-color: #f5f5f5;
+        }
+        h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        button {
+            display: block;
+            width: 100%;
+            margin: 5px 0;
+            padding: 10px 12px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            background-color: #fff;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background-color: #e8f4ff;
+        }
+        button.selected {
+            background-color: #3399ff;
+            color: white;
+            border-color: #007acc;
+            font-weight: bold;
+        }
+        hr {
+            border: none;
+            border-top: 1px solid #ddd;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+
+<h3>🔀 NAT</h3>
+
+<button type="button" id="btnStart"   onclick="runNat(event, 'start', this)">🚀 NAT START</button>
+<button type="button" id="btnStop"    onclick="runNat(event, 'stop', this)">🛑 NAT STOP</button>
+<button type="button" id="btnRestart" onclick="runNat(event, 'restart', this)">🔄 NAT RESTART</button>
+<button type="button" id="btnStatus"  onclick="runNat(event, 'status', this)">📊 NAT STATUS</button>
+
+<hr>
+
+<h4>Configuración</h4>
+
+<button type="button" id="btnConfig"  onclick="runNat(event, 'config', this)">⚙️ NAT CONFIG</button>
+
+<hr>
+
+<button type="button" id="btnInfo"    onclick="openInfo(event, this)">ℹ️ VER INFO</button>
+
+<script>
+function runNat(event, action, btn) {
+    // 🔒 Evitar que el botón navegue el iframe izquierdo
+    event.preventDefault();
+    event.stopPropagation();
+
+    const iframe = parent.frames['body'];
+    if (!iframe) {
+        console.error("Iframe 'body' no encontrado");
+        return;
+    }
+
+    // Marcar botón seleccionado
+    const botones = document.querySelectorAll("button");
+    botones.forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+
+    sessionStorage.setItem("natSelected", btn.id);
+
+    // Acción CONFIG → cargar config.html en iframe derecho
+    if (action === "config") {
+        iframe.location.href = "/web/nat/config.html";
+        return;
+    }
+
+    // Otras acciones → mostrar logs.html
+    iframe.location.href = "/web/nat/logs.html";
+
+    // Ejecutar acción backend
+    fetch('/admin/nat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action })
+    }).catch(error => {
+        console.error("Error al ejecutar la acción:", error);
+    });
+}
+
+// Restaurar botón seleccionado
+window.addEventListener("DOMContentLoaded", () => {
+    const saved = sessionStorage.getItem("natSelected");
+    if (saved) {
+        const btn = document.getElementById(saved);
+        if (btn) btn.classList.add("selected");
+    }
+});
+
+function openInfo(event, btn) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const iframe = parent.frames['body'];
+    if (!iframe) return;
+
+    document.querySelectorAll("button").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    sessionStorage.setItem("natSelected", btn.id);
+
+    iframe.location.href = "/web/nat/info.html";
+}
+</script>
+
+</body>
+</html>

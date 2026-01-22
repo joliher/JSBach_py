@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>DMZ - Manual de Uso</title>
+    <style>
+        html, body { 
+            margin: 0; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .info-container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+        h2 {
+            color: #333;
+            margin-top: 0;
+            font-size: 28px;
+        }
+        h3 {
+            color: #667eea;
+            margin-top: 25px;
+            font-size: 20px;
+        }
+        p, li {
+            color: #666;
+            line-height: 1.8;
+            font-size: 15px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            border-radius: 4px;
+        }
+        .warning {
+            background: #fff3cd;
+            border-left-color: #ffc107;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background: #d4edda;
+            border-left-color: #28a745;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            color: #d63384;
+        }
+    </style>
+</head>
+<body>
+    <div class="info-container">
+        <h2>📡 DMZ - Manual de Uso</h2>
+        
+        <div class="section">
+            <h3>📋 Descripción General</h3>
+            <p>El módulo DMZ (DeMilitarized Zone) permite exponer servicios internos de la red hacia Internet de forma controlada, redirigiendo el tráfico entrante desde la interfaz WAN hacia direcciones IP específicas en la VLAN 2 (DMZ).</p>
+        </div>
+
+        <div class="section">
+            <h3>⚙️ Requisitos Previos</h3>
+            <ul>
+                <li>Las VLANs deben estar activas</li>
+                <li>La interfaz WAN debe estar configurada</li>
+                <li>Los destinos deben estar en la VLAN 2 (DMZ)</li>
+                <li>Verificar con: <code>iptables -t nat -L -n</code></li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h3>🎯 Funciones Principales</h3>
+            
+            <p><strong>CONFIG:</strong> Añadir nuevos destinos DMZ</p>
+            <ul>
+                <li>Define IP/MASK de destino</li>
+                <li>Especifica puerto a redirigir</li>
+                <li>Selecciona protocolo (TCP/UDP)</li>
+                <li>Guarda configuración en <code>config/dmz/dmz.json</code></li>
+            </ul>
+
+            <p><strong>START:</strong> Activar todas las reglas DNAT configuradas</p>
+            <ul>
+                <li>Verifica que VLANs estén activas</li>
+                <li>Lee interfaz WAN de configuración</li>
+                <li>Aplica reglas: <code>iptables -t nat -A PREROUTING -i &lt;wan&gt; -p &lt;proto&gt; --dport &lt;port&gt; -j DNAT --to-destination &lt;ip&gt;</code></li>
+                <li>Actualiza estado a activo</li>
+            </ul>
+
+            <p><strong>STOP:</strong> Desactivar todas las reglas y aislamientos</p>
+            <ul>
+                <li>Elimina reglas DNAT de cada destino</li>
+                <li>Desaisla automáticamente todos los destinos</li>
+                <li>Actualiza estado a inactivo</li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h3>🔒 Gestión de Aislamiento</h3>
+            <p>El aislamiento permite bloquear temporalmente el tráfico hacia un destino DMZ sin eliminar la configuración.</p>
+            
+            <p><strong>AISLAR:</strong></p>
+            <ul>
+                <li>Bloquea tráfico hacia la IP con: <code>iptables -I FORWARD 1 -d &lt;ip&gt; -m conntrack --ctstate NEW -j DROP</code></li>
+                <li>Mantiene la regla DNAT activa</li>
+                <li>Útil para mantenimiento o respuesta a incidentes</li>
+            </ul>
+
+            <p><strong>DESAISLAR:</strong></p>
+            <ul>
+                <li>Elimina la regla de bloqueo</li>
+                <li>Restaura el tráfico hacia el destino</li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h3>📊 STATUS - Vista de Destinos</h3>
+            <p>La página de STATUS muestra una tabla con todos los destinos configurados:</p>
+            <ul>
+                <li><strong>IP:</strong> Dirección de destino interna</li>
+                <li><strong>Puerto:</strong> Puerto redirigido</li>
+                <li><strong>Protocolo:</strong> TCP o UDP</li>
+                <li><strong>Estado:</strong> ACTIVO o AISLADO</li>
+                <li><strong>Acciones:</strong> Botones para AISLAR/DESAISLAR y ELIMINAR</li>
+            </ul>
+        </div>
+
+        <div class="warning">
+            <h3>⚠️ Consideraciones de Seguridad</h3>
+            <ul>
+                <li>Exponer servicios a Internet conlleva riesgos de seguridad</li>
+                <li>Usa solo la VLAN 2 (DMZ) para servicios públicos</li>
+                <li>Mantén los servicios actualizados y parcheados</li>
+                <li>Implementa firewall en los propios servidores DMZ</li>
+                <li>Monitoriza logs regularmente</li>
+            </ul>
+        </div>
+
+        <div class="success">
+            <h3>✅ Ejemplo Práctico</h3>
+            <p><strong>Escenario:</strong> Exponer servidor web en 192.168.2.10</p>
+            <ol>
+                <li>Ir a CONFIG y añadir: IP=<code>192.168.2.10</code>, Puerto=<code>80</code>, Protocolo=<code>TCP</code></li>
+                <li>Ir a STATUS y hacer clic en START DMZ</li>
+                <li>El tráfico HTTP entrante será redirigido automáticamente</li>
+                <li>Para mantenimiento temporal, usar botón AISLAR</li>
+                <li>Para eliminar permanentemente, usar botón ELIMINAR</li>
+            </ol>
+        </div>
+
+        <div class="section">
+            <h3>🔧 Resolución de Problemas</h3>
+            <ul>
+                <li><strong>START no funciona:</strong> Verificar que VLANs estén activas</li>
+                <li><strong>No llega tráfico:</strong> Comprobar que WAN esté configurada correctamente</li>
+                <li><strong>Puerto no responde:</strong> Verificar que el servicio interno esté escuchando</li>
+                <li><strong>Conflictos:</strong> Asegurarse de no duplicar puertos para diferentes IPs</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

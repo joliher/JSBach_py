@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSBach - Información</title>
+    <style>
+        html, body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .info-container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+        h1 {
+            color: #333;
+            margin-top: 0;
+            font-size: 32px;
+            text-align: center;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 15px;
+        }
+        h2 {
+            color: #667eea;
+            margin-top: 30px;
+            font-size: 24px;
+        }
+        h3 {
+            color: #555;
+            margin-top: 20px;
+            font-size: 18px;
+        }
+        p, li {
+            color: #666;
+            line-height: 1.8;
+            font-size: 15px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 20px;
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            border-radius: 6px;
+        }
+        .module-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .module-card {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .module-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+        .module-icon {
+            font-size: 48px;
+            margin-bottom: 10px;
+        }
+        .module-name {
+            font-weight: bold;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        .module-desc {
+            font-size: 13px;
+            color: #666;
+        }
+        .info-box {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 20px 0;
+            color: #0c5460;
+        }
+        .warning-box {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+            padding: 15px;
+            margin: 20px 0;
+            color: #856404;
+        }
+        code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            color: #d63384;
+            font-size: 14px;
+        }
+        ul {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+        .version-info {
+            text-align: center;
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #e0e0e0;
+            color: #999;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="info-container">
+        <h1>🎼 JSBach Router Management System</h1>
+
+        <div class="section">
+            <h2>📋 Descripción General</h2>
+            <p>
+                <strong>JSBach</strong> es un sistema de gestión y configuración de router desarrollado con 
+                <strong>Python</strong>, <strong>FastAPI</strong> y <strong>Uvicorn</strong>. 
+                Permite administrar de forma centralizada todos los aspectos de la conectividad de red, 
+                incluyendo interfaces WAN, NAT, VLANs, Firewall y etiquetado de paquetes.
+            </p>
+        </div>
+
+        <div class="info-box">
+            <strong>ℹ️ Objetivo del Proyecto:</strong> Proporcionar una interfaz web intuitiva y moderna para 
+            configurar y monitorizar servicios de red en sistemas Linux, eliminando la necesidad de configuración 
+            manual mediante línea de comandos.
+        </div>
+
+        <h2>🎯 Módulos Disponibles</h2>
+        
+        <div class="module-grid">
+            <div class="module-card">
+                <div class="module-icon">🌐</div>
+                <div class="module-name">WAN</div>
+                <div class="module-desc">Configuración de interfaces de red externas</div>
+            </div>
+            
+            <div class="module-card">
+                <div class="module-icon">🔄</div>
+                <div class="module-name">NAT</div>
+                <div class="module-desc">Network Address Translation y enrutamiento</div>
+            </div>
+            
+            <div class="module-card">
+                <div class="module-icon">🔥</div>
+                <div class="module-name">FIREWALL</div>
+                <div class="module-desc">Gestión de reglas de iptables por VLAN</div>
+            </div>
+            
+            <div class="module-card">
+                <div class="module-icon">🏷️</div>
+                <div class="module-name">VLANs</div>
+                <div class="module-desc">Configuración de redes virtuales</div>
+            </div>
+            
+            <div class="module-card">
+                <div class="module-icon">🏷️</div>
+                <div class="module-name">TAGGING</div>
+                <div class="module-desc">Etiquetado de paquetes y priorización</div>
+            </div>
+            
+            <div class="module-card">
+                <div class="module-icon">📡</div>
+                <div class="module-name">DMZ</div>
+                <div class="module-desc">Zona desmilitarizada y port forwarding</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🏗️ Arquitectura del Sistema</h2>
+            
+            <h3>Backend (Python/FastAPI)</h3>
+            <ul>
+                <li><code>/app/core/</code> - Módulos funcionales (wan, nat, firewall, vlans, tagging)</li>
+                <li><code>/app/controllers/</code> - Controladores y routers de API</li>
+                <li><code>/app/utils/</code> - Funciones auxiliares y utilidades</li>
+                <li><code>/config/</code> - Archivos de configuración JSON por módulo</li>
+                <li><code>/logs/</code> - Registros de acciones y operaciones</li>
+            </ul>
+
+            <h3>Frontend (HTML/CSS/JavaScript)</h3>
+            <ul>
+                <li><code>/web/</code> - Páginas HTML, estilos y scripts</li>
+                <li>Cada módulo tiene su carpeta: <code>/web/wan/</code>, <code>/web/firewall/</code>, etc.</li>
+                <li>Interfaz dinámica con JavaScript vanilla (sin frameworks)</li>
+            </ul>
+        </div>
+
+        <div class="warning-box">
+            <h3>⚠️ Requisitos del Sistema</h3>
+            <ul>
+                <li>Sistema operativo: <strong>Linux</strong> (probado en Ubuntu)</li>
+                <li>Python 3.8 o superior</li>
+                <li>Permisos de superusuario (sudo) para comandos de red</li>
+                <li>Paquetes: <code>iptables</code>, <code>iproute2</code>, <code>bridge-utils</code></li>
+                <li>Dependencias Python: <code>fastapi</code>, <code>uvicorn</code>, <code>python-multipart</code></li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h2>🚀 Inicio Rápido</h2>
+            <ol>
+                <li>Iniciar el servidor: <code>bash start_server.sh</code></li>
+                <li>Acceder desde el navegador: <code>http://localhost:8100</code></li>
+                <li>Iniciar sesión con las credenciales configuradas</li>
+                <li>Navegar a través de los módulos usando el menú superior</li>
+                <li>Configurar cada módulo según las necesidades de red</li>
+            </ol>
+        </div>
+
+        <div class="info-box">
+            <strong>💡 Consejo:</strong> Los archivos de configuración pueden editarse manualmente, 
+            pero se recomienda usar la interfaz web para evitar errores de sintaxis. 
+            Siempre haz copias de seguridad antes de realizar cambios importantes.
+        </div>
+
+        <div class="version-info">
+            <strong>JSBach Router Management System</strong><br>
+            Versión 4.0 | Enero 2026<br>
+            Desarrollado con Python, FastAPI y tecnologías web modernas
+        </div>
+    </div>
+</body>
+</html>

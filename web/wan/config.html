@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Configuración WAN</title>
+    <style>
+        html, body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 700px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+        h2 {
+            color: #333;
+            margin-top: 0;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+        .warning-box {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            color: #856404;
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            font-weight: 600;
+            color: #495057;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #ced4da;
+            border-radius: 6px;
+            font-size: 14px;
+            box-sizing: border-box;
+            transition: border-color 0.3s;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        button {
+            width: 100%;
+            padding: 12px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            margin-top: 10px;
+        }
+        button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+        button:active {
+            transform: translateY(0);
+        }
+        .hidden { 
+            display: none; 
+        }
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            font-weight: 500;
+        }
+        .success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>🌐 Configuración WAN</h2>
+
+        <div class="warning-box">
+            <strong>⚠️ ADVERTENCIA IMPORTANTE:</strong><br>
+            Esta función debe utilizarse <strong>ÚNICAMENTE</strong> para configurar la interfaz que estará expuesta a internet (WAN).<br>
+            <strong>NO es recomendable usar esta configuración para interfaces internas normales.</strong>
+        </div>
+
+        <form id="wanForm">
+            <div class="form-group">
+                <label for="interface">Interfaz</label>
+                <input type="text" id="interface" placeholder="eth0" required>
+            </div>
+
+            <div class="form-group">
+                <label for="mode">Modo</label>
+                <select id="mode">
+                    <option value="dhcp">DHCP</option>
+                    <option value="manual">Manual</option>
+                </select>
+            </div>
+
+            <div id="manualFields" class="hidden">
+                <div class="form-group">
+                    <label for="ip">IP</label>
+                    <input type="text" id="ip" placeholder="192.168.1.10">
+                </div>
+
+                <div class="form-group">
+                    <label for="mask">Máscara (CIDR)</label>
+                    <input type="number" id="mask" placeholder="24" min="0" max="32">
+                </div>
+
+                <div class="form-group">
+                    <label for="gateway">Gateway</label>
+                    <input type="text" id="gateway" placeholder="192.168.1.1">
+                </div>
+
+                <div class="form-group">
+                    <label for="dns">DNS (separados por coma)</label>
+                    <input type="text" id="dns" placeholder="8.8.8.8,1.1.1.1">
+                </div>
+            </div>
+
+            <button type="submit">Guardar configuración</button>
+        </form>
+
+        <div id="result"></div>
+    </div>
+
+<script>
+/* -----------------------------
+   Utilidades de validación
+----------------------------- */
+
+function isValidIPv4(ip) {
+    const regex =
+        /^(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)(\.(25[0-5]|2[0-4]\d|1\d{2}|[1-9]?\d)){3}$/;
+    return regex.test(ip);
+}
+
+function isValidCIDR(mask) {
+    const n = Number(mask);
+    return Number.isInteger(n) && n >= 0 && n <= 32;
+}
+
+function isValidDNSList(dns) {
+    const servers = dns.split(",").map(d => d.trim()).filter(Boolean);
+    if (servers.length === 0) return false;
+    return servers.every(isValidIPv4);
+}
+
+function showError(msg) {
+    resultDiv.style.display = "block";
+    resultDiv.className = "error";
+    resultDiv.textContent = msg;
+}
+
+function showSuccess(msg) {
+    resultDiv.style.display = "block";
+    resultDiv.className = "success";
+    resultDiv.textContent = msg;
+}
+
+/* -----------------------------
+   Lógica del formulario
+----------------------------- */
+
+const form = document.getElementById("wanForm");
+const modeSelect = document.getElementById("mode");
+const manualFields = document.getElementById("manualFields");
+const resultDiv = document.getElementById("result");
+
+modeSelect.addEventListener("change", () => {
+    manualFields.classList.toggle(
+        "hidden",
+        modeSelect.value !== "manual"
+    );
+});
+
+form.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    resultDiv.textContent = "";
+
+    const iface = document.getElementById("interface").value.trim();
+    const mode = modeSelect.value;
+
+    if (!iface) {
+        return showError("La interfaz no puede estar vacía");
+    }
+
+    const params = {
+        interface: iface,
+        mode: mode
+    };
+
+    if (mode === "manual") {
+        const ip = document.getElementById("ip").value.trim();
+        const mask = document.getElementById("mask").value.trim();
+        const gateway = document.getElementById("gateway").value.trim();
+        const dns = document.getElementById("dns").value.trim();
+
+        if (!isValidIPv4(ip)) {
+            return showError("IP inválida");
+        }
+        if (!isValidCIDR(mask)) {
+            return showError("Máscara inválida (0–32)");
+        }
+        if (!isValidIPv4(gateway)) {
+            return showError("Gateway inválido");
+        }
+        if (!isValidDNSList(dns)) {
+            return showError("DNS inválido (use IPs separadas por comas)");
+        }
+
+        params.ip = ip;
+        params.mask = mask;
+        params.gateway = gateway;
+        params.dns = dns;
+    }
+
+    try {
+        const response = await fetch("/admin/wan", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json"
+            },
+            credentials: "include",
+            body: JSON.stringify({
+                action: "config",
+                params: params
+            })
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.detail || "Error desconocido");
+        }
+
+        showSuccess(data.message);
+
+    } catch (err) {
+        showError(err.message);
+    }
+});
+</script>
+
+</body>
+</html>

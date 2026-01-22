@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Ver VLANs - Firewall</title>
+    <style>
+        html, body {
+            margin: 0;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+        h2 {
+            color: #333;
+            margin-top: 0;
+            border-bottom: 3px solid #667eea;
+            padding-bottom: 10px;
+        }
+        .info-box {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #0c5460;
+        }
+        .warning-box {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #856404;
+        }
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-size: 18px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        thead {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        th {
+            font-weight: 600;
+            text-transform: uppercase;
+            font-size: 12px;
+            letter-spacing: 0.5px;
+        }
+        td {
+            font-size: 14px;
+            color: #333;
+        }
+        tbody tr:hover {
+            background: #f8f9fa;
+        }
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+        .status-badge {
+            display: inline-block;
+            padding: 5px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        .status-active {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-inactive {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .whitelist-badge {
+            display: inline-block;
+            padding: 4px 10px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: bold;
+            background: #d4edda;
+            color: #155724;
+        }
+        .whitelist-badge.disabled {
+            background: #e2e3e5;
+            color: #6c757d;
+        }
+        .rule-count {
+            font-family: 'Courier New', monospace;
+            background: #e9ecef;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            color: #495057;
+        }
+        code {
+            background: #e9ecef;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+            color: #d63384;
+            font-size: 13px;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #999;
+        }
+        .empty-state-icon {
+            font-size: 48px;
+            margin-bottom: 15px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>👁️ Vista de VLANs - Firewall</h2>
+
+        <div class="info-box">
+            <strong>ℹ️ Información:</strong> Esta página muestra las VLANs configuradas en el sistema y su estado en el firewall. 
+            Para iniciar/detener el firewall para todas las VLANs, use los botones START/STOP en el menú principal.
+        </div>
+
+        <div id="content" class="loading">
+            Cargando configuración de VLANs...
+        </div>
+    </div>
+
+    <script>
+        let firewallConfig = {};
+        let vlansConfig = {};
+
+        async function loadConfig() {
+            try {
+                // Cargar configuración del firewall
+                const fwResponse = await fetch('/config/firewall/firewall.json', {
+                    credentials: 'include'
+                });
+                
+                if (!fwResponse.ok) {
+                    throw new Error('No se pudo cargar la configuración del firewall');
+                }
+
+                firewallConfig = await fwResponse.json();
+
+                // Cargar configuración de VLANs
+                const vlansResponse = await fetch('/config/vlans/vlans.json', {
+                    credentials: 'include'
+                });
+
+                if (!vlansResponse.ok) {
+                    throw new Error('No se pudo cargar la configuración de VLANs');
+                }
+
+                vlansConfig = await vlansResponse.json();
+                renderTable();
+
+            } catch (error) {
+                console.error('Error cargando configuración:', error);
+                document.getElementById('content').innerHTML = `
+                    <div class="warning-box">
+                        ⚠️ Error al cargar configuración. Asegúrese de que:
+                        <ul style="margin: 10px 0 0 20px;">
+                            <li>El firewall esté iniciado (START)</li>
+                            <li>Existan VLANs configuradas en el sistema</li>
+                            <li>Los archivos de configuración sean accesibles</li>
+                        </ul>
+                    </div>
+                `;
+            }
+        }
+
+        function renderTable() {
+            const fwVlans = firewallConfig.vlans || {};
+            const systemVlans = vlansConfig.vlans || [];
+
+            if (systemVlans.length === 0) {
+                document.getElementById('content').innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📭</div>
+                        <h3>No hay VLANs configuradas</h3>
+                        <p>Configure VLANs en el módulo correspondiente para verlas aquí.</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = `
+                <table>
+                    <thead>
+                        <tr>
+                            <th>VLAN ID</th>
+                            <th>Nombre</th>
+                            <th>Dirección IP</th>
+                            <th>Estado Cadenas</th>
+                            <th>Aislamiento</th>
+                            <th>Whitelist</th>
+                            <th>Reglas</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            // Ordenar VLANs por ID
+            systemVlans.sort((a, b) => a.id - b.id);
+
+            systemVlans.forEach(vlan => {
+                const vlanId = vlan.id;
+                const vlanName = vlan.name || 'Sin nombre';
+                const vlanIp = vlan.ip_network || 'N/A';
+                
+                // Información del firewall para esta VLAN
+                const fwVlan = fwVlans[vlanId] || {};
+                const isActive = fwVlan.enabled || false;
+                const isolated = fwVlan.isolated || false;
+                const whitelistEnabled = fwVlan.whitelist_enabled || false;
+                const whitelistRules = fwVlan.whitelist || [];
+                const ruleCount = whitelistRules.length;
+                
+                // Determinar estado de aislamiento
+                const isolationStatus = !isActive 
+                    ? '<span style="color: #999;">—</span>' 
+                    : (isolated 
+                        ? '<span class="status-badge status-inactive">🚫 AISLADA</span>'
+                        : '<span style="color: #999;">—</span>'
+                    );
+
+                html += `
+                    <tr>
+                        <td style="font-weight: bold; text-align: center;">${vlanId}</td>
+                        <td>${vlanName}</td>
+                        <td><code>${vlanIp}</code></td>
+                        <td>
+                            <span class="status-badge ${isActive ? 'status-active' : 'status-inactive'}">
+                                ${isActive ? '🟢 ACTIVA' : '🔴 INACTIVA'}
+                            </span>
+                        </td>
+                        <td>
+                            ${isolationStatus}
+                        </td>
+                        <td>
+                            ${vlanId == 1 || vlanId == 2
+                                ? '<span style="color: #999;">N/A</span>'
+                                : `<span class="whitelist-badge ${whitelistEnabled ? '' : 'disabled'}">
+                                    ${whitelistEnabled ? '🔒 HABILITADA' : '🔓 DESHABILITADA'}
+                                </span>`
+                            }
+                        </td>
+                        <td>
+                            ${(vlanId == 1 || vlanId == 2)
+                                ? '<span style="color: #999;">—</span>'
+                                : (whitelistEnabled && ruleCount > 0 
+                                    ? `<span class="rule-count">${ruleCount} regla${ruleCount > 1 ? 's' : ''}</span>`
+                                    : '<span style="color: #999;">—</span>')
+                            }
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                    </tbody>
+                </table>
+
+                <div class="info-box" style="margin-top: 30px;">
+                    <strong>💡 Acciones Disponibles:</strong>
+                    <ul style="margin: 10px 0 0 20px; line-height: 1.8;">
+                        <li><strong>START FIREWALL:</strong> Activa el firewall para todas las VLANs configuradas</li>
+                        <li><strong>STOP FIREWALL:</strong> Desactiva el firewall para todas las VLANs</li>
+                        <li><strong>CONFIG WHITELIST:</strong> Administra las reglas de whitelist por VLAN</li>
+                        <li><strong>STATUS:</strong> Ver estado detallado y reglas de iptables activas</li>
+                    </ul>
+                </div>
+            `;
+
+            document.getElementById('content').innerHTML = html;
+        }
+
+        // Cargar configuración al iniciar
+        window.addEventListener('DOMContentLoaded', loadConfig);
+
+        // Recargar cada 10 segundos para mantener actualizado
+        setInterval(loadConfig, 10000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>FIREWALL - Manual de Uso</title>
+    <style>
+        html, body { 
+            margin: 0; 
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding: 20px; 
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+        }
+        .info-container {
+            background: rgba(255, 255, 255, 0.95);
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        }
+        h2 {
+            color: #333;
+            margin-top: 0;
+            font-size: 28px;
+        }
+        h3 {
+            color: #667eea;
+            margin-top: 25px;
+            font-size: 20px;
+        }
+        p, li {
+            color: #666;
+            line-height: 1.8;
+            font-size: 15px;
+        }
+        .section {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f8f9fa;
+            border-left: 4px solid #667eea;
+            border-radius: 4px;
+        }
+        .warning {
+            background: #fff3cd;
+            border-left-color: #ffc107;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background: #d4edda;
+            border-left-color: #28a745;
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 4px;
+        }
+        code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            color: #d63384;
+        }
+    </style>
+</head>
+<body>
+    <div class="info-container">
+        <h2>🔥 FIREWALL - Manual de Uso</h2>
+        
+        <div class="section">
+            <h3>📋 Descripción General</h3>
+            <p>El módulo Firewall permite gestionar reglas de iptables organizadas por VLANs. Crea cadenas personalizadas para cada VLAN configurada en el sistema.</p>
+        </div>
+
+        <div class="section">
+            <h3>⚙️ Requisitos Previos</h3>
+            <ul>
+                <li>Tener VLANs configuradas en el sistema</li>
+                <li>Permisos sudo configurados para iptables</li>
+                <li>Verificar con: <code>sudo iptables -L -n</code></li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h3>🎯 Funciones Principales</h3>
+            
+            <p><strong>START:</strong> Inicia el firewall creando cadenas personalizadas para cada VLAN</p>
+            <ul>
+                <li>Crea cadena <code>VLAN_X</code> para cada VLAN configurada</li>
+                <li><strong>Vincula la cadena a FORWARD:</strong> el tráfico desde la IP de cada VLAN pasa por su cadena</li>
+                <li>Por defecto, todas las reglas están en ACCEPT (sin restricción)</li>
+                <li>Guarda configuración en <code>config/firewall/firewall.json</code></li>
+            </ul>
+
+            <p><strong>STOP:</strong> Detiene el firewall eliminando todas las cadenas</p>
+            <ul>
+                <li><strong>Desvincula las cadenas de FORWARD</strong> eliminando las reglas de salto</li>
+                <li>Limpia reglas de cada cadena VLAN</li>
+                <li>Elimina las cadenas personalizadas</li>
+                <li>Actualiza estado a detenido</li>
+            </ul>
+
+            <p><strong>RESTART:</strong> Reinicia el firewall (ejecuta STOP seguido de START)</p>
+
+            <p><strong>STATUS:</strong> Muestra el estado actual del firewall</p>
+            <ul>
+                <li>Lista cada VLAN y su estado (ACTIVA/INACTIVA)</li>
+                <li><strong>Verifica vinculación a FORWARD:</strong> indica si la cadena está activa</li>
+                <li>Muestra la IP de origen de cada VLAN</li>
+                <li>Muestra si la whitelist está habilitada</li>
+                <li>Muestra las primeras reglas activas de iptables</li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h3>🔐 Funciones de Whitelist</h3>
+            
+            <p><strong>ENABLE_WHITELIST:</strong> Habilita whitelist en una VLAN (bloquea todo excepto destinos permitidos)</p>
+            <ul>
+                <li>Parámetros: <code>vlan_id</code>, <code>whitelist</code> (lista de IPs/puertos)</li>
+                <li>Formato de reglas: <code>"192.168.1.1"</code> o <code>"192.168.1.1:80"</code></li>
+                <li>Agrega regla DROP al final para bloquear todo lo demás</li>
+            </ul>
+
+            <p><strong>DISABLE_WHITELIST:</strong> Deshabilita whitelist (vuelve a ACCEPT todo)</p>
+            <ul>
+                <li>Parámetros: <code>vlan_id</code></li>
+                <li>Limpia todas las reglas de la cadena</li>
+                <li>Restaura comportamiento permisivo</li>
+            </ul>
+
+            <p><strong>ADD_RULE:</strong> Agrega una regla a la whitelist existente</p>
+            <ul>
+                <li>Parámetros: <code>vlan_id</code>, <code>rule</code></li>
+                <li>Ejemplo: <code>{"vlan_id": 1, "rule": "8.8.8.8"}</code></li>
+                <li>Reaplica automáticamente la whitelist si está habilitada</li>
+            </ul>
+
+            <p><strong>REMOVE_RULE:</strong> Elimina una regla de la whitelist</p>
+            <ul>
+                <li>Parámetros: <code>vlan_id</code>, <code>rule</code></li>
+                <li>Reaplica la whitelist sin esa regla</li>
+            </ul>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h3>🔐 Funciones de Whitelist</h3>
+            
+            <p><strong>ENABLE_WHITELIST:</strong> Habilita whitelist en una VLAN (bloquea todo excepto destinos permitidos)</p>
+            <ul>
+                <li>Parámetros: <code>vlan_id</code>, <code>whitelist</code> (lista de IPs/puertos)</li>
+                <li>Formato de reglas: <code>"192.168.1.1"</code> o <code>"192.168.1.1:80"</code></li>
+                <li>Agrega regla DROP al final para bloquear todo lo demás</li>
+            </ul>
+
+            <p><strong>DISABLE_WHITELIST:</strong> Deshabilita whitelist (vuelve a ACCEPT todo)</p>
+            <ul>
+                <li>Parámetros: <code>vlan_id</code></li>
+                <li>Limpia todas las reglas de la cadena</li>
+                <li>Restaura comportamiento permisivo</li>
+            </ul>
+
+            <p><strong>ADD_RULE:</strong> Agrega una regla a la whitelist existente</p>
+            <ul>
+                <li>Parámetros: <code>vlan_id</code>, <code>rule</code></li>
+                <li>Ejemplo: <code>{"vlan_id": 1, "rule": "8.8.8.8"}</code></li>
+                <li>Reaplica automáticamente la whitelist si está habilitada</li>
+            </ul>
+
+            <p><strong>REMOVE_RULE:</strong> Elimina una regla de la whitelist</p>
+            <ul>
+                <li>Parámetros: <code>vlan_id</code>, <code>rule</code></li>
+                <li>Reaplica la whitelist sin esa regla</li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h3>🔧 Configuración de VLANs</h3>
+            <p>El firewall lee la configuración desde <code>config/vlans/vlans.json</code>:</p>
+            <ul>
+                <li>VLAN ID: Identificador numérico</li>
+                <li>Nombre: Etiqueta descriptiva</li>
+                <li>IP: Dirección IP de la interfaz VLAN</li>
+            </ul>
+        </div>
+
+        <div class="warning">
+            <h3>⚠️ Advertencias</h3>
+            <ul>
+                <li><strong>Las cadenas se vinculan automáticamente a FORWARD:</strong> el tráfico desde las IPs de VLAN pasa por las cadenas personalizadas</li>
+                <li>Por defecto, las reglas están en ACCEPT (sin bloqueo)</li>
+                <li>El filtrado es por IP de origen (-s): tráfico saliente desde cada VLAN</li>
+                <li>Use la interfaz web para configurar whitelist y reglas específicas</li>
+                <li>Asegúrese de tener acceso alternativo al servidor antes de aplicar reglas restrictivas</li>
+            </ul>
+        </div>
+
+        <div class="success">
+            <h3>✅ Ejemplo de Uso</h3>
+            <ol>
+                <li>Configure VLANs en el módulo correspondiente</li>
+                <li>Haga clic en <strong>START</strong> para inicializar el firewall</li>
+                <li>Use <strong>STATUS</strong> para verificar las cadenas creadas</li>
+                <li><strong>Para habilitar whitelist:</strong>
+                    <ul>
+                        <li>Use la interfaz web o API con: <code>enable_whitelist</code></li>
+                        <li>Parámetros: <code>{"vlan_id": 1, "whitelist": ["8.8.8.8", "1.1.1.1:53"]}</code></li>
+                    </ul>
+                </li>
+                <li><strong>Para agregar más reglas:</strong> Use <code>add_rule</code> con <code>{"vlan_id": 1, "rule": "192.168.1.1"}</code></li>
+                <li>Use <strong>RESTART</strong> para reaplicar configuración si es necesario</li>
+            </ol>
+        </div>
+
+        <div class="section">
+            <h3>📁 Archivos de Configuración</h3>
+            <ul>
+                <li><code>config/vlans/vlans.json</code> - Configuración de VLANs</li>
+                <li><code>config/firewall/firewall.json</code> - Estado y reglas del firewall</li>
+                <li><code>logs/firewall/</code> - Directorio de logs</li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h3>🐛 Diagnóstico</h3>
+            <p>Si encuentra problemas:</p>
+            <ul>
+                <li>Verifique logs del servidor en la terminal</li>
+                <li>Ejecute <code>sudo iptables -L -n -v</code> para ver reglas actuales</li>
+                <li>Verifique que sudo funcione sin contraseña: <code>sudo -n iptables -L</code></li>
+                <li>Revise <code>config/firewall/firewall.json</code> para ver configuración guardada</li>
+            </ul>
+        </div>
+
+        <div class="section">
+            <h3>🔄 Versión</h3>
+            <p>Firewall Module v2.2 - Con soporte de Whitelist</p>
+            <p><strong>Nuevo en v2.2:</strong></p>
+            <ul>
+                <li>🔐 Soporte completo de whitelist por VLAN</li>
+                <li>✅ Funciones: enable_whitelist, disable_whitelist, add_rule, remove_rule</li>
+                <li>✅ Formato flexible: IP o IP:puerto</li>
+                <li>✅ Aplicación automática al hacer START</li>
+            </ul>
+            <p><strong>Versiones anteriores:</strong></p>
+            <ul>
+                <li>v2.1: Vinculación automática a FORWARD</li>
+                <li>v2.0: Versión base simplificada</li>
+            </ul>
+            <p>Última actualización: Enero 2026</p>
+        </div>
+    </div>
+</body>
+</html>

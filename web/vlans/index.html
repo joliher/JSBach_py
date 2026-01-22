@@ -1,0 +1,51 @@
+<!-- web/vlans/index.html -->
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Router JSBach - VLANs</title>
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .container {
+            display: grid;
+            grid-template-rows: 15% 85%; /* Cabecera más baja */
+            height: 100%;
+        }
+
+        .top-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+
+        .bottom {
+            display: grid;
+            grid-template-columns: 25% 75%;
+            height: 100%;
+        }
+
+        .left-frame, .right-frame {
+            width: 100%;
+            height: 100%;
+            border: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Cabecera -->
+        <iframe src="/web/header.html" class="top-frame" name="header"></iframe>
+
+        <!-- Menú y contenido principal -->
+        <div class="bottom">
+            <iframe src="/web/vlans/menu.html" class="left-frame" name="menu"></iframe>
+            <iframe src="/web/vlans/info.html" class="right-frame" name="body"></iframe>
+        </div>
+    </div>
+</body>
+</html>

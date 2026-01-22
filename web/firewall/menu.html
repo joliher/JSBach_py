@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>FIREWALL - Menú</title>
+    <style>
+        html, body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            padding: 10px;
+            background-color: #f5f5f5;
+        }
+        h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        button {
+            display: block;
+            width: 100%;
+            margin: 5px 0;
+            padding: 10px 12px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            background-color: #fff;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background-color: #e8f4ff;
+        }
+        button.selected {
+            background-color: #3399ff;
+            color: white;
+            border-color: #007acc;
+            font-weight: bold;
+        }
+        hr {
+            border: none;
+            border-top: 1px solid #ddd;
+            margin: 15px 0;
+        }
+    </style>
+</head>
+<body>
+
+<h3>🔥 FIREWALL</h3>
+
+<!-- Acciones principales -->
+<button id="btnStart"   onclick="runAction('start', this)">🚀 FIREWALL START</button>
+<button id="btnStop"    onclick="runAction('stop', this)">🛑 FIREWALL STOP</button>
+<button id="btnRestart" onclick="runAction('restart', this)">🔄 FIREWALL RESTART</button>
+<button id="btnStatus"  onclick="runAction('status', this)">📊 FIREWALL STATUS</button>
+
+<hr>
+
+<h4 style="margin: 10px 0; color: #555;">Vista y Configuración</h4>
+
+<!-- Configuración y visualización -->
+<button id="btnViewVlans" onclick="openConfig('vlans', this)">👁️ VER VLANS</button>
+<button id="btnConfigWhitelist" onclick="openConfig('whitelist', this)">📋 CONFIG WHITELIST</button>
+
+<hr>
+
+<!-- Visualización -->
+<button id="btnInfo" onclick="openInfo(event, this)">ℹ️ VER INFO</button>
+
+<script>
+async function runAction(action, btn) {
+    const iframe = parent.frames['body'];
+
+    // Resaltar botón seleccionado
+    document.querySelectorAll("button").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    sessionStorage.setItem("firewallSelected", btn.id);
+
+    // Si la acción es STATUS, cargar logs.html y terminar
+    if (action === 'status') {
+        iframe.location.href = "/web/firewall/logs.html";
+        return;
+    }
+
+    // Para START, STOP, RESTART: cargar logs.html primero
+    iframe.location.href = "/web/firewall/logs.html";
+
+    // Ejecutar acción en segundo plano
+    console.log('Iniciando fetch a /admin/firewall con action:', action);
+    
+    fetch('/admin/firewall', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: action }),
+        credentials: 'include'
+    })
+    .then(response => {
+        console.log('Respuesta recibida:', response.status, response.statusText);
+        return response.json();
+    })
+    .then(data => {
+        console.log('Datos recibidos:', data);
+    })
+    .catch(error => {
+        console.error("Error al ejecutar la acción:", error);
+    });
+}
+
+function openConfig(section, btn) {
+    const iframe = parent.frames['body'];
+
+    // Resaltar botón seleccionado
+    document.querySelectorAll("button").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    sessionStorage.setItem("firewallSelected", btn.id);
+
+    // Redirigir a la página correspondiente
+    if (section === "vlans") {
+        iframe.location.href = "/web/firewall/view_vlans.html";
+    } else if (section === "whitelist") {
+        iframe.location.href = "/web/firewall/config_whitelist.html";
+    }
+}
+
+function openInfo(event, btn) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    
+    const iframe = parent.frames['body'];
+    if (!iframe) return;
+
+    document.querySelectorAll("button").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    sessionStorage.setItem("firewallSelected", btn.id);
+
+    iframe.location.href = "/web/firewall/info.html";
+}
+
+function openLogs(btn) {
+    const iframe = parent.frames['body'];
+
+    // Resaltar botón seleccionado
+    document.querySelectorAll("button").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+    sessionStorage.setItem("firewallSelected", btn.id);
+
+    // Cargar logs
+    iframe.location.href = "/web/firewall/logs.html";
+}
+
+// Mantener botón seleccionado al recargar
+window.addEventListener("DOMContentLoaded", () => {
+    const saved = sessionStorage.getItem("firewallSelected");
+    if (saved) {
+        const btn = document.getElementById(saved);
+        if (btn) btn.classList.add("selected");
+    }
+});
+</script>
+
+</body>
+</html>
