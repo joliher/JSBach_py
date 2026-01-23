@@ -172,7 +172,8 @@
         
         // Función para detener todos los módulos
         async function stopAllModules() {
-            const modules = ['wan', 'nat', 'firewall', 'vlans', 'tagging', 'dmz'];
+            // NAT debe detenerse después de firewall y dmz (tiene dependencias)
+            const modules = ['wan', 'firewall', 'dmz', 'nat', 'vlans', 'tagging'];
             const stopBtn = document.getElementById('stop-btn');
             const messageDiv = document.getElementById('stop-message');
             

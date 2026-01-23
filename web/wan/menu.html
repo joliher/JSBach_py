@@ -39,11 +39,38 @@
             border-top: 1px solid #ddd;
             margin: 15px 0;
         }
+        .status-box {
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin: 10px 0;
+            text-align: center;
+            font-size: 13px;
+            transition: all 0.3s;
+        }
+        .status-box.activo {
+            background: #d4edda;
+            border-color: #28a745;
+            color: #155724;
+        }
+        .status-box.inactivo {
+            background: #f8d7da;
+            border-color: #dc3545;
+            color: #721c24;
+        }
+        .status-box.desconocido {
+            background: #fff3cd;
+            border-color: #ffc107;
+            color: #856404;
+        }
     </style>
 </head>
 <body>
 
 <h3>🌐 WAN</h3>
+
+<div class="status-box" id="module-status">Estado: Cargando...</div>
 
 <button type="button" id="btnStart"   onclick="runWan(event, 'start', this)">🚀 WAN START</button>
 <button type="button" id="btnStop"    onclick="runWan(event, 'stop', this)">🛑 WAN STOP</button>
@@ -105,7 +132,53 @@ window.addEventListener("DOMContentLoaded", () => {
         const btn = document.getElementById(saved);
         if (btn) btn.classList.add("selected");
     }
+    fetchModuleStatus();
 });
+
+// Función para obtener el estado del módulo con polling adaptativo
+let lastStatus = '';
+let pollInterval = 2000;
+let unchangedCount = 0;
+let statusTimerId = null;
+
+function fetchModuleStatus() {
+    fetch('/admin/status', { credentials: 'include' })
+        .then(response => response.json())
+        .then(data => {
+            const status = data['wan'] || 'DESCONOCIDO';
+            
+            if (status === lastStatus) {
+                unchangedCount++;
+                if (unchangedCount > 3) pollInterval = 5000;
+                if (unchangedCount > 10) pollInterval = 10000;
+                if (unchangedCount > 20) pollInterval = 30000;
+            } else {
+                lastStatus = status;
+                unchangedCount = 0;
+                pollInterval = 2000;
+                
+                const statusBox = document.getElementById('module-status');
+                statusBox.textContent = `Estado: ${status}`;
+                statusBox.classList.remove('activo', 'inactivo', 'desconocido');
+                
+                if (status === 'ACTIVO') {
+                    statusBox.classList.add('activo');
+                } else if (status === 'INACTIVO') {
+                    statusBox.classList.add('inactivo');
+                } else {
+                    statusBox.classList.add('desconocido');
+                }
+            }
+            
+            clearTimeout(statusTimerId);
+            statusTimerId = setTimeout(fetchModuleStatus, pollInterval);
+        })
+        .catch(error => {
+            console.error('Error al obtener estado:', error);
+            clearTimeout(statusTimerId);
+            statusTimerId = setTimeout(fetchModuleStatus, 5000);
+        });
+}
 
 function openInfo(event, btn) {
     event.preventDefault();

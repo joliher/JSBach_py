@@ -93,30 +93,63 @@
     </div>
 
     <script>
-        // Esta función hará la solicitud al backend para obtener el contenido del log
+        let lastContent = '';
+        let autoScroll = true;
+        let pollInterval = 2000;
+        let unchangedCount = 0;
+        let logTimerId = null;
+
+        const logContent = document.getElementById("log-content");
+        
+        logContent.addEventListener('mousedown', () => {
+            autoScroll = false;
+        });
+        
+        logContent.addEventListener('scroll', () => {
+            const isAtBottom = logContent.scrollHeight - logContent.scrollTop <= logContent.clientHeight + 10;
+            autoScroll = isAtBottom;
+        });
+
         function fetchLog() {
-            const moduleName = "tagging";  // Nombre del módulo cuyo log queremos ver
+            const moduleName = "tagging";
 
             fetch(`/admin/logs/${moduleName}`, {
                 credentials: 'include'
             })
                 .then(response => response.text())
                 .then(data => {
-                    const logContent = document.getElementById("log-content");
-                    logContent.textContent = data;
+                    if (data === lastContent) {
+                        unchangedCount++;
+                        if (unchangedCount > 3) pollInterval = 5000;
+                        if (unchangedCount > 10) pollInterval = 10000;
+                        if (unchangedCount > 20) pollInterval = 30000;
+                    } else {
+                        unchangedCount = 0;
+                        pollInterval = 2000;
+                        
+                        const scrollPos = logContent.scrollTop;
+                        const wasAtBottom = logContent.scrollHeight - scrollPos <= logContent.clientHeight + 10;
+                        
+                        lastContent = data;
+                        logContent.textContent = data;
 
-                    // Asegurarse de que el scroll esté al final (abajo)
-                    logContent.scrollTop = logContent.scrollHeight;
+                        if (autoScroll || wasAtBottom) {
+                            logContent.scrollTop = logContent.scrollHeight;
+                        } else {
+                            logContent.scrollTop = scrollPos;
+                        }
+                    }
+                    
+                    clearTimeout(logTimerId);
+                    logTimerId = setTimeout(fetchLog, pollInterval);
                 })
                 .catch(error => {
                     document.getElementById("log-content").textContent = `Error al cargar el log: ${error.message}`;
+                    clearTimeout(logTimerId);
+                    logTimerId = setTimeout(fetchLog, 5000);
                 });
         }
 
-        // Actualización periódica cada 2 segundos (2000 ms)
-        setInterval(fetchLog, 2000); // 2 segundos
-
-        // Cargar el log al cargar la página
         window.onload = fetchLog;
     </script>
 

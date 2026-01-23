@@ -93,6 +93,25 @@
     </div>
 
     <script>
+        let lastContent = '';
+        let autoScroll = true;
+        let pollInterval = 2000;
+        let unchangedCount = 0;
+        let logTimerId = null;
+
+        // Detectar si el usuario está interactuando con el contenido
+        const logContent = document.getElementById("log-content");
+        
+        logContent.addEventListener('mousedown', () => {
+            autoScroll = false; // Desactivar auto-scroll si el usuario hace clic
+        });
+        
+        logContent.addEventListener('scroll', () => {
+            // Reactivar auto-scroll solo si el usuario está en el fondo
+            const isAtBottom = logContent.scrollHeight - logContent.scrollTop <= logContent.clientHeight + 10;
+            autoScroll = isAtBottom;
+        });
+
         // Esta función hará la solicitud al backend para obtener el contenido del log
         function fetchLog() {
             const moduleName = "dmz";  // Nombre del módulo cuyo log queremos ver
@@ -102,19 +121,44 @@
             })
                 .then(response => response.text())
                 .then(data => {
-                    const logContent = document.getElementById("log-content");
-                    logContent.textContent = data;
+                    // Solo actualizar si el contenido ha cambiado
+                    if (data === lastContent) {
+                        // Si no cambió, ralentizar gradualmente
+                        unchangedCount++;
+                        if (unchangedCount > 3) pollInterval = 5000;
+                        if (unchangedCount > 10) pollInterval = 10000;
+                        if (unchangedCount > 20) pollInterval = 30000;
+                    } else {
+                        // Si cambió, volver a polling rápido
+                        unchangedCount = 0;
+                        pollInterval = 2000;
+                        
+                        // Guardar posición del scroll antes de actualizar
+                        const scrollPos = logContent.scrollTop;
+                        const wasAtBottom = logContent.scrollHeight - scrollPos <= logContent.clientHeight + 10;
+                        
+                        // Actualizar contenido
+                        lastContent = data;
+                        logContent.textContent = data;
 
-                    // Asegurarse de que el scroll esté al final (abajo)
-                    logContent.scrollTop = logContent.scrollHeight;
+                        // Restaurar o auto-scroll según el contexto
+                        if (autoScroll || wasAtBottom) {
+                            logContent.scrollTop = logContent.scrollHeight; // Ir al final
+                        } else {
+                            logContent.scrollTop = scrollPos; // Mantener posición
+                        }
+                    }
+                    
+                    // Re-programar con el nuevo intervalo
+                    clearTimeout(logTimerId);
+                    logTimerId = setTimeout(fetchLog, pollInterval);
                 })
                 .catch(error => {
                     document.getElementById("log-content").textContent = `Error al cargar el log: ${error.message}`;
+                    clearTimeout(logTimerId);
+                    logTimerId = setTimeout(fetchLog, 5000); // Retry en 5s
                 });
         }
-
-        // Actualización periódica cada 2 segundos (2000 ms)
-        setInterval(fetchLog, 2000); // 2 segundos
 
         // Cargar el log al cargar la página
         window.onload = fetchLog;

@@ -81,7 +81,7 @@ def start(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     try:
         if mode == "dhcp":
             # Lanzar dhcpcd en background (retorna inmediatamente)
-            success, msg = _run_command(["/usr/sbin/dhcpcd", iface])
+            success, msg = _run_command(["/usr/sbin/dhcpcd", "-b", iface])
             if not success:
                 return False, f"Error al lanzar DHCP en {iface}: {msg}"
             

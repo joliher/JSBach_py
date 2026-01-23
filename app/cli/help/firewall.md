@@ -10,6 +10,12 @@ Ver el estado actual del firewall
 Ejemplo:
   firewall status
 
+Funcionalidad:
+  - Muestra el estado de cada VLAN configurada
+  - Verifica si están activas y vinculadas a FORWARD
+  - Indica si tienen whitelist habilitada
+  - Ejecuta iptables -nvL y guarda el resultado en logs/firewall/actions.log
+
 ### firewall start
 Iniciar el firewall (aplicar reglas)
 

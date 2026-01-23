@@ -149,8 +149,9 @@ def execute_module_action(module_name: str, action: str, params: Optional[dict] 
         result = func(params)
         if isinstance(result, tuple) and len(result) == 2:
             success, message = result
-            # No logear para DMZ start/stop/status (tienen su propio sistema de logs)
-            if not (module_name == "dmz" and action in ["start", "stop", "status"]):
+            # No logear para DMZ y firewall start/stop/restart/status (tienen su propio sistema de logs)
+            if not ((module_name == "dmz" and action in ["start", "stop", "restart", "status"]) or 
+                    (module_name == "firewall" and action in ["start", "stop", "restart", "status"])):
                 gf.log_action(module_name, f"Resultado de la acción '{action}':\n{message}")
             return bool(success), str(message)
         gf.log_action(module_name, f"Resultado inesperado de la acción '{action}'")

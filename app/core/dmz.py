@@ -319,21 +319,23 @@ def config(params: Dict[str, Any] = None) -> Tuple[bool, str]:
 def start(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     """Iniciar DMZ - Aplicar reglas DNAT en cadena custom."""
     logger.info("=== INICIO: dmz start ===")
-    _write_log("=== INICIO: DMZ START ===")
+    _write_log("\n\n" + "=" * 80)
+    _write_log("🚀 DMZ START")
+    _write_log("=" * 80 + "\n")
     create_module_config_directory("dmz")
     create_module_log_directory("dmz")
     
     # Verificar que VLANs estén activas
     if not _check_vlans_active():
         msg = "Error: las VLANs deben estar activas para iniciar DMZ"
-        _write_log(msg)
+        _write_log(msg + "\n")
         return False, msg
     
     # Obtener interfaz WAN
     wan_interface = _get_wan_interface()
     if not wan_interface:
         msg = "Error: no se pudo obtener la interfaz WAN"
-        _write_log(msg)
+        _write_log(msg + "\n")
         return False, msg
     
     # Cargar configuración
@@ -342,7 +344,7 @@ def start(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     
     if not destinations:
         msg = "⚠️ Error: no hay destinos DMZ configurados. Ve a CONFIG para añadir destinos."
-        _write_log(msg)
+        _write_log(msg + "\n")
         return False, msg
     
     # Crear cadena custom DMZ_RULES en tabla nat
@@ -350,7 +352,7 @@ def start(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     success, output = _run_command(["/usr/sbin/iptables", "-t", "nat", "-N", chain_name])
     if not success and "already exists" not in output.lower():
         msg = f"Error creando cadena {chain_name}: {output}"
-        _write_log(msg)
+        _write_log(msg + "\n")
         return False, msg
     
     # Limpiar reglas existentes de la cadena
@@ -412,7 +414,7 @@ def start(params: Dict[str, Any] = None) -> Tuple[bool, str]:
             _write_log(f"✅ Cadena {chain_name} vinculada a PREROUTING")
         else:
             msg = f"Error vinculando {chain_name} a PREROUTING: {output}"
-            _write_log(f"❌ {msg}")
+            _write_log(f"❌ {msg}\n")
             return False, msg
     else:
         _write_log(f"✓ Cadena {chain_name} ya estaba vinculada a PREROUTING")
@@ -425,10 +427,10 @@ def start(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     if errors:
         msg += "\n\nErrores:\n" + "\n".join(errors)
         _write_log(f"❌ DMZ iniciado con errores: {'; '.join(errors)}")
-        _write_log("=== FIN: DMZ START (CON ERRORES) ===")
+        _write_log("=" * 80 + "\n")
     else:
         _write_log(f"✅ DMZ iniciado correctamente: {'; '.join(results)}")
-        _write_log("=== FIN: DMZ START (ÉXITO) ===")
+        _write_log("=" * 80 + "\n")
     
     logger.info("=== FIN: dmz start ===")
     return len(errors) == 0, msg
@@ -437,7 +439,9 @@ def start(params: Dict[str, Any] = None) -> Tuple[bool, str]:
 def stop(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     """Detener DMZ - Eliminar reglas DNAT y cadena custom."""
     logger.info("=== INICIO: dmz stop ===")
-    _write_log("=== INICIO: DMZ STOP ===")
+    _write_log("\n\n" + "=" * 80)
+    _write_log("🛑 DMZ STOP")
+    _write_log("=" * 80 + "\n")
     create_module_config_directory("dmz")
     create_module_log_directory("dmz")
     
@@ -445,7 +449,7 @@ def stop(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     wan_interface = _get_wan_interface()
     if not wan_interface:
         msg = "Error: no se pudo obtener la interfaz WAN"
-        _write_log(msg)
+        _write_log(msg + "\n")
         return False, msg
     
     # Cargar configuración
@@ -523,7 +527,7 @@ def stop(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     
     msg = "DMZ detenido:\n" + "\n".join(results)
     _write_log(f"✅ DMZ detenido correctamente: {'; '.join(results)}")
-    _write_log("=== FIN: DMZ STOP (ÉXITO) ===")
+    _write_log("=" * 80 + "\n")
     
     logger.info("=== FIN: dmz stop ===")
     return True, msg
@@ -535,26 +539,23 @@ def restart(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     create_module_config_directory("dmz")
     create_module_log_directory("dmz")
     
-    _write_log("=== INICIO: DMZ RESTART ===")
+    _write_log("\n\n" + "=" * 80)
+    _write_log("🔄 DMZ RESTART")
+    _write_log("=" * 80 + "\n")
     
     # Detener DMZ
     success_stop, msg_stop = stop(params)
     if not success_stop:
-        _write_log(f"❌ Error al detener DMZ durante restart: {msg_stop}")
         logger.error(f"Error en stop durante restart: {msg_stop}")
         return False, f"Error al detener DMZ: {msg_stop}"
-    
-    _write_log("✅ DMZ detenido correctamente")
     
     # Iniciar DMZ
     success_start, msg_start = start(params)
     if not success_start:
-        _write_log(f"❌ Error al iniciar DMZ durante restart: {msg_start}")
         logger.error(f"Error en start durante restart: {msg_start}")
         return False, f"Error al iniciar DMZ: {msg_start}"
     
-    _write_log("✅ DMZ iniciado correctamente")
-    _write_log("=== FIN: DMZ RESTART (ÉXITO) ===")
+    _write_log("=" * 80 + "\n")
     
     logger.info("=== FIN: dmz restart (éxito) ===")
     return True, "DMZ reiniciado correctamente"

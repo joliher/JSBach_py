@@ -39,11 +39,38 @@
             border-top: 1px solid #ddd;
             margin: 15px 0;
         }
+        .status-box {
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin: 10px 0;
+            text-align: center;
+            font-size: 13px;
+            transition: all 0.3s;
+        }
+        .status-box.activo {
+            background: #d4edda;
+            border-color: #28a745;
+            color: #155724;
+        }
+        .status-box.inactivo {
+            background: #f8d7da;
+            border-color: #dc3545;
+            color: #721c24;
+        }
+        .status-box.desconocido {
+            background: #fff3cd;
+            border-color: #ffc107;
+            color: #856404;
+        }
     </style>
 </head>
 <body>
 
 <h3>📡 DMZ</h3>
+
+<div class="status-box" id="module-status">Estado: Cargando...</div>
 
 <!-- Acciones principales -->
 <button id="btnStart" onclick="executeAction('start', this)">🚀 DMZ START</button>
@@ -73,32 +100,36 @@ function openPage(page, btn) {
     iframe.location.href = `/web/dmz/${page}.html`;
 }
 
-async function executeAction(action, btn) {
-    // Resaltar botón seleccionado y cambiar a logs
+function executeAction(action, btn) {
+    const iframe = parent.frames['body'];
+    
+    // Resaltar botón seleccionado
     document.querySelectorAll("button").forEach(b => b.classList.remove("selected"));
     btn.classList.add("selected");
     sessionStorage.setItem("dmzSelected", btn.id);
     
-    // Cambiar iframe a logs.html inmediatamente
-    const iframe = parent.frames['body'];
-    iframe.location.href = '/web/dmz/logs.html';
+    // Cargar logs.html para todas las acciones
+    iframe.location.href = "/web/dmz/logs.html";
     
-    // Ejecutar la acción en el backend
-    try {
-        const response = await fetch('/admin/dmz', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({ action: action, params: {} })
-        });
-        
-        const data = await response.json();
-        if (!response.ok) {
-            console.error('Error ejecutando acción:', data.detail || 'Error desconocido');
-        }
-    } catch (err) {
-        console.error('Error en executeAction:', err);
-    }
+    // Ejecutar acción en segundo plano
+    console.log('DMZ: Iniciando fetch a /admin/dmz con action:', action);
+    
+    fetch('/admin/dmz', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ action: action })
+    })
+    .then(response => {
+        console.log('DMZ: Respuesta recibida:', response.status, response.statusText);
+        return response.json();
+    })
+    .then(data => {
+        console.log('DMZ: Datos recibidos:', data);
+    })
+    .catch(error => {
+        console.error('DMZ: Error ejecutando acción:', error);
+    });
 }
 
 // Restaurar el botón seleccionado al cargar la página
@@ -108,7 +139,56 @@ window.onload = function() {
         const btn = document.getElementById(selected);
         if (btn) btn.classList.add("selected");
     }
+    fetchModuleStatus();
 };
+
+// Función para obtener el estado del módulo con polling adaptativo
+let lastStatus = '';
+let pollInterval = 2000;
+let unchangedCount = 0;
+let statusTimerId = null;
+
+function fetchModuleStatus() {
+    fetch('/admin/status', { credentials: 'include' })
+        .then(response => response.json())
+        .then(data => {
+            const status = data['dmz'] || 'DESCONOCIDO';
+            
+            if (status === lastStatus) {
+                // Si no cambió, ralentizar gradualmente
+                unchangedCount++;
+                if (unchangedCount > 3) pollInterval = 5000;   // Después de 3 = 5s
+                if (unchangedCount > 10) pollInterval = 10000; // Después de 10 = 10s
+                if (unchangedCount > 20) pollInterval = 30000; // Después de 20 = 30s
+            } else {
+                // Si cambió, volver a polling rápido y actualizar UI
+                lastStatus = status;
+                unchangedCount = 0;
+                pollInterval = 2000;
+                
+                const statusBox = document.getElementById('module-status');
+                statusBox.textContent = `Estado: ${status}`;
+                statusBox.classList.remove('activo', 'inactivo', 'desconocido');
+                
+                if (status === 'ACTIVO') {
+                    statusBox.classList.add('activo');
+                } else if (status === 'INACTIVO') {
+                    statusBox.classList.add('inactivo');
+                } else {
+                    statusBox.classList.add('desconocido');
+                }
+            }
+            
+            // Re-programar con el nuevo intervalo
+            clearTimeout(statusTimerId);
+            statusTimerId = setTimeout(fetchModuleStatus, pollInterval);
+        })
+        .catch(error => {
+            console.error('Error al obtener estado:', error);
+            clearTimeout(statusTimerId);
+            statusTimerId = setTimeout(fetchModuleStatus, 5000); // Retry en 5s
+        });
+}
 </script>
 
 </body>

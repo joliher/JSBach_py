@@ -475,6 +475,25 @@ def status(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     """Obtener estado del firewall."""
     logger.info("=== INICIO: firewall status ===")
     
+    # Ejecutar iptables -nvL y guardar en actions.log
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    log_file = os.path.join(BASE_DIR, "logs", "firewall", "actions.log")
+    
+    success, iptables_output = _run_command(["/usr/sbin/iptables", "-nvL"])
+    if success:
+        try:
+            with open(log_file, "a") as f:
+                f.write(f"\n\n{'=' * 80}\n")
+                f.write(f"📋 FIREWALL STATUS - iptables -nvL\n")
+                f.write(f"🕒 {timestamp}\n")
+                f.write(f"{'=' * 80}\n\n")
+                f.write(iptables_output)
+                f.write(f"\n{'=' * 80}\n")
+            logger.info(f"Estado de iptables guardado en {log_file}")
+        except Exception as e:
+            logger.error(f"Error guardando log: {e}")
+    
     fw_cfg = _load_firewall_config()
     vlans = fw_cfg.get("vlans", {})
     
