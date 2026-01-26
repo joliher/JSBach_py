@@ -91,6 +91,29 @@ Ejemplo:
 Parámetros:
   - vlan_id: ID de la VLAN a desaislar
 
+### firewall restrict
+Restringir acceso al router (INPUT) desde una VLAN.
+
+Ejemplo:
+  firewall restrict {"vlan_id": 20}
+
+Parámetros:
+  - vlan_id: ID de la VLAN a restringir
+
+Comportamiento:
+  - VLAN 1 y 2: DROP total hacia el router (todo INPUT bloqueado desde esa red).
+  - Otras VLANs: solo se permite DHCP (67/68 UDP), DNS (53 TCP/UDP) e ICMP; el resto se bloquea.
+  - Compatible con whitelist y aislamiento; las reglas viven en la cadena INPUT_RESTRICTIONS.
+
+### firewall unrestrict
+Quitar la restricción de una VLAN.
+
+Ejemplo:
+  firewall unrestrict {"vlan_id": 20}
+
+Parámetros:
+  - vlan_id: ID de la VLAN a desrestringir
+
 ## FUNCIONAMIENTO
 
 El firewall gestiona el acceso a Internet por VLAN mediante:

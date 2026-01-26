@@ -64,6 +64,24 @@
             border-color: #ffc107;
             color: #856404;
         }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background-color: #e9ecef;
+        }
+        button:disabled:hover {
+            background-color: #e9ecef;
+        }
+        .dependency-warning {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 6px;
+            padding: 8px 10px;
+            margin: 10px 0;
+            font-size: 12px;
+            color: #856404;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -71,6 +89,10 @@
 <h3>🔥 FIREWALL</h3>
 
 <div class="status-box" id="module-status">Estado: Cargando...</div>
+
+<div class="dependency-warning" id="wan-warning">
+    ⚠️ La WAN debe estar configurada antes de iniciar el firewall
+</div>
 
 <!-- Acciones principales -->
 <button id="btnStart"   onclick="runAction('start', this)">🚀 FIREWALL START</button>
@@ -183,12 +205,31 @@ let lastStatus = '';
 let pollInterval = 2000;
 let unchangedCount = 0;
 let statusTimerId = null;
+let wanConfigured = false;
 
 function fetchModuleStatus() {
     fetch('/admin/status', { credentials: 'include' })
         .then(response => response.json())
         .then(data => {
             const status = data['firewall'] || 'DESCONOCIDO';
+            const wanStatus = data['wan'] || 'DESCONOCIDO';
+            
+            // Verificar si WAN está configurada
+            wanConfigured = (wanStatus !== 'DESCONOCIDO' && wanStatus !== 'ERROR');
+            
+            // Deshabilitar botón START si WAN no está configurada
+            const btnStart = document.getElementById('btnStart');
+            const wanWarning = document.getElementById('wan-warning');
+            
+            if (!wanConfigured) {
+                btnStart.disabled = true;
+                btnStart.title = 'La WAN debe estar configurada primero';
+                wanWarning.style.display = 'block';
+            } else {
+                btnStart.disabled = false;
+                btnStart.title = '';
+                wanWarning.style.display = 'none';
+            }
             
             if (status === lastStatus) {
                 unchangedCount++;

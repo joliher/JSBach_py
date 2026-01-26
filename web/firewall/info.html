@@ -74,6 +74,7 @@
         <div class="section">
             <h3>⚙️ Requisitos Previos</h3>
             <ul>
+                <li><strong>⚠️ WAN debe estar configurada</strong> - El firewall requiere que la interfaz WAN esté configurada antes de iniciarse</li>
                 <li>Tener VLANs configuradas en el sistema</li>
                 <li>Permisos sudo configurados para iptables</li>
                 <li>Verificar con: <code>sudo iptables -L -n</code></li>
@@ -140,37 +141,38 @@
                 <li>Parámetros: <code>vlan_id</code>, <code>rule</code></li>
                 <li>Reaplica la whitelist sin esa regla</li>
             </ul>
-            </ul>
         </div>
 
         <div class="section">
-            <h3>🔐 Funciones de Whitelist</h3>
+            <h3>🔒 Funciones de Aislamiento y Restricción</h3>
             
-            <p><strong>ENABLE_WHITELIST:</strong> Habilita whitelist en una VLAN (bloquea todo excepto destinos permitidos)</p>
-            <ul>
-                <li>Parámetros: <code>vlan_id</code>, <code>whitelist</code> (lista de IPs/puertos)</li>
-                <li>Formato de reglas: <code>"192.168.1.1"</code> o <code>"192.168.1.1:80"</code></li>
-                <li>Agrega regla DROP al final para bloquear todo lo demás</li>
-            </ul>
-
-            <p><strong>DISABLE_WHITELIST:</strong> Deshabilita whitelist (vuelve a ACCEPT todo)</p>
+            <p><strong>AISLAR:</strong> Bloquea tráfico entre VLANs (FORWARD)</p>
             <ul>
                 <li>Parámetros: <code>vlan_id</code></li>
-                <li>Limpia todas las reglas de la cadena</li>
-                <li>Restaura comportamiento permisivo</li>
+                <li>Inserta reglas DROP en <code>SECURITY_DROPS_FIREWALL</code></li>
+                <li>VLAN 1: Bloquea tráfico entrante (-d)</li>
+                <li>Otras: Bloquea tráfico saliente (-s)</li>
+                <li>Independiente de whitelist y restricciones</li>
             </ul>
 
-            <p><strong>ADD_RULE:</strong> Agrega una regla a la whitelist existente</p>
+            <p><strong>DESAISLAR:</strong> Elimina el bloqueo entre VLANs</p>
             <ul>
-                <li>Parámetros: <code>vlan_id</code>, <code>rule</code></li>
-                <li>Ejemplo: <code>{"vlan_id": 1, "rule": "8.8.8.8"}</code></li>
-                <li>Reaplica automáticamente la whitelist si está habilitada</li>
+                <li>Parámetros: <code>vlan_id</code></li>
+                <li>Elimina reglas de <code>SECURITY_DROPS_FIREWALL</code></li>
             </ul>
 
-            <p><strong>REMOVE_RULE:</strong> Elimina una regla de la whitelist</p>
+            <p><strong>RESTRICT:</strong> Bloquea acceso al router (INPUT) desde una VLAN</p>
             <ul>
-                <li>Parámetros: <code>vlan_id</code>, <code>rule</code></li>
-                <li>Reaplica la whitelist sin esa regla</li>
+                <li>Parámetros: <code>vlan_id</code></li>
+                <li><strong>VLAN 1 y 2:</strong> DROP total de tráfico desde la VLAN</li>
+                <li><strong>Otras VLANs:</strong> Permite DHCP (67/68) e ICMP (ping), bloquea lo demás</li>
+                <li>Diferente del aislamiento: restringe acceso al router, no entre VLANs</li>
+            </ul>
+
+            <p><strong>UNRESTRICT:</strong> Elimina las restricciones de una VLAN</p>
+            <ul>
+                <li>Parámetros: <code>vlan_id</code></li>
+                <li>Elimina todas las reglas INPUT de restricción</li>
             </ul>
         </div>
 

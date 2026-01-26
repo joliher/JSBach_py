@@ -134,6 +134,61 @@
             font-size: 48px;
             margin-bottom: 15px;
         }
+        .status-matrix {
+            display: grid;
+            grid-template-columns: auto auto auto auto;
+            gap: 8px;
+            align-items: center;
+            font-size: 12px;
+        }
+        .status-matrix-label {
+            font-weight: 600;
+            color: #555;
+            text-align: right;
+            min-width: 90px;
+        }
+        .status-matrix-value {
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: 500;
+            text-align: center;
+            min-width: 80px;
+        }
+        .status-matrix-value.active {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status-matrix-value.inactive {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .status-matrix-value.disabled {
+            background: #e2e3e5;
+            color: #6c757d;
+        }
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        .action-buttons button {
+            padding: 6px 12px;
+            font-size: 11px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            background: white;
+            transition: all 0.2s;
+        }
+        .action-buttons button:hover {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        .action-buttons button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
     </style>
 </head>
 <body>
@@ -156,27 +211,38 @@
 
         async function loadConfig() {
             try {
+                console.log('[DEBUG] Iniciando loadConfig...');
+                
                 // Cargar configuración del firewall
-                const fwResponse = await fetch('/config/firewall/firewall.json', {
+                console.log('[DEBUG] Cargando firewall config...');
+                const fwResponse = await fetch('/admin/config/firewall/firewall.json', {
                     credentials: 'include'
                 });
                 
+                console.log('[DEBUG] Firewall response status:', fwResponse.status);
+                
                 if (!fwResponse.ok) {
-                    throw new Error('No se pudo cargar la configuración del firewall');
+                    throw new Error('No se pudo cargar la configuración del firewall. Status: ' + fwResponse.status);
                 }
 
                 firewallConfig = await fwResponse.json();
+                console.log('[DEBUG] Firewall config cargada:', firewallConfig);
 
                 // Cargar configuración de VLANs
-                const vlansResponse = await fetch('/config/vlans/vlans.json', {
+                console.log('[DEBUG] Cargando VLANs config...');
+                const vlansResponse = await fetch('/admin/config/vlans/vlans.json', {
                     credentials: 'include'
                 });
 
+                console.log('[DEBUG] VLANs response status:', vlansResponse.status);
+                
                 if (!vlansResponse.ok) {
-                    throw new Error('No se pudo cargar la configuración de VLANs');
+                    throw new Error('No se pudo cargar la configuración de VLANs. Status: ' + vlansResponse.status);
                 }
 
                 vlansConfig = await vlansResponse.json();
+                console.log('[DEBUG] VLANs config cargada:', vlansConfig);
+                console.log('[DEBUG] Llamando a renderTable...');
                 renderTable();
 
             } catch (error) {
@@ -195,10 +261,16 @@
         }
 
         function renderTable() {
+            console.log('[DEBUG] renderTable iniciada');
             const fwVlans = firewallConfig.vlans || {};
             const systemVlans = vlansConfig.vlans || [];
+            
+            console.log('[DEBUG] fwVlans:', fwVlans);
+            console.log('[DEBUG] systemVlans:', systemVlans);
+            console.log('[DEBUG] systemVlans.length:', systemVlans.length);
 
             if (systemVlans.length === 0) {
+                console.log('[DEBUG] No hay VLANs, mostrando mensaje');
                 document.getElementById('content').innerHTML = `
                     <div class="empty-state">
                         <div class="empty-state-icon">📭</div>
@@ -208,6 +280,8 @@
                 `;
                 return;
             }
+            
+            console.log('[DEBUG] Construyendo tabla HTML...');
 
             let html = `
                 <table>
@@ -215,11 +289,8 @@
                         <tr>
                             <th>VLAN ID</th>
                             <th>Nombre</th>
-                            <th>Dirección IP</th>
-                            <th>Estado Cadenas</th>
-                            <th>Aislamiento</th>
-                            <th>Whitelist</th>
-                            <th>Reglas</th>
+                            <th>IP/Máscara</th>
+                            <th>Estado Firewall</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -234,70 +305,76 @@
                 const vlanIp = vlan.ip_network || 'N/A';
                 
                 // Información del firewall para esta VLAN
-                const fwVlan = fwVlans[vlanId] || {};
+                const fwVlan = fwVlans[String(vlanId)] || {};
                 const isActive = fwVlan.enabled || false;
                 const isolated = fwVlan.isolated || false;
                 const whitelistEnabled = fwVlan.whitelist_enabled || false;
                 const whitelistRules = fwVlan.whitelist || [];
+                const restricted = fwVlan.restricted || false;
                 const ruleCount = whitelistRules.length;
                 
-                // Determinar estado de aislamiento
-                const isolationStatus = !isActive 
-                    ? '<span style="color: #999;">—</span>' 
-                    : (isolated 
-                        ? '<span class="status-badge status-inactive">🚫 AISLADA</span>'
-                        : '<span style="color: #999;">—</span>'
-                    );
+                // Generar matriz de estado (más compacta y visual)
+                const stateMatrix = `
+                    <div class="status-matrix">
+                        <div class="status-matrix-label">Cadena FW:</div>
+                        <div class="status-matrix-value ${isActive ? 'active' : 'inactive'}">
+                            ${isActive ? '✓ Activa' : '✗ Inactiva'}
+                        </div>
+                        <div class="status-matrix-label">Whitelist:</div>
+                        <div class="status-matrix-value ${vlanId == 1 || vlanId == 2 ? 'disabled' : (whitelistEnabled ? 'active' : 'inactive')}">
+                            ${vlanId == 1 || vlanId == 2 ? 'N/A' : (whitelistEnabled ? `✓ (${ruleCount})` : '✗')}
+                        </div>
+                        <div class="status-matrix-label">Aislada:</div>
+                        <div class="status-matrix-value ${isolated ? 'active' : 'inactive'}">
+                            ${isolated ? '✓ Sí' : '✗ No'}
+                        </div>
+                        <div class="status-matrix-label">Restricciones:</div>
+                        <div class="status-matrix-value ${restricted ? 'active' : 'inactive'}">
+                            ${restricted ? '✓ Activas' : '✗ No'}
+                        </div>
+                    </div>
+                `;
 
                 html += `
                     <tr>
-                        <td style="font-weight: bold; text-align: center;">${vlanId}</td>
-                        <td>${vlanName}</td>
+                        <td style="font-weight: bold; text-align: center; width: 60px;">${vlanId}</td>
+                        <td style="width: 150px;">${vlanName}</td>
                         <td><code>${vlanIp}</code></td>
-                        <td>
-                            <span class="status-badge ${isActive ? 'status-active' : 'status-inactive'}">
-                                ${isActive ? '🟢 ACTIVA' : '🔴 INACTIVA'}
-                            </span>
-                        </td>
-                        <td>
-                            ${isolationStatus}
-                        </td>
-                        <td>
-                            ${vlanId == 1 || vlanId == 2
-                                ? '<span style="color: #999;">N/A</span>'
-                                : `<span class="whitelist-badge ${whitelistEnabled ? '' : 'disabled'}">
-                                    ${whitelistEnabled ? '🔒 HABILITADA' : '🔓 DESHABILITADA'}
-                                </span>`
-                            }
-                        </td>
-                        <td>
-                            ${(vlanId == 1 || vlanId == 2)
-                                ? '<span style="color: #999;">—</span>'
-                                : (whitelistEnabled && ruleCount > 0 
-                                    ? `<span class="rule-count">${ruleCount} regla${ruleCount > 1 ? 's' : ''}</span>`
-                                    : '<span style="color: #999;">—</span>')
-                            }
+                        <td style="width: 400px;">
+                            ${stateMatrix}
                         </td>
                     </tr>
                 `;
             });
-
+            
+            console.log('[DEBUG] Tabla construida, actualizando DOM...');
+            
             html += `
                     </tbody>
                 </table>
 
                 <div class="info-box" style="margin-top: 30px;">
-                    <strong>💡 Acciones Disponibles:</strong>
+                    <strong>ℹ️ Información de Estados:</strong>
                     <ul style="margin: 10px 0 0 20px; line-height: 1.8;">
-                        <li><strong>START FIREWALL:</strong> Activa el firewall para todas las VLANs configuradas</li>
-                        <li><strong>STOP FIREWALL:</strong> Desactiva el firewall para todas las VLANs</li>
-                        <li><strong>CONFIG WHITELIST:</strong> Administra las reglas de whitelist por VLAN</li>
+                        <li><strong>Cadena FW:</strong> Estado de la cadena de firewall para la VLAN.</li>
+                        <li><strong>Whitelist:</strong> Modo whitelist habilitado (solo VLANs 3+). Número de reglas entre paréntesis.</li>
+                        <li><strong>Aislada:</strong> Bloquea tráfico entre VLANs (FORWARD).</li>
+                        <li><strong>Restricciones:</strong> Bloquea acceso al router (INPUT). Para VLANs 1-2: DROP total. Para otras: permite DHCP e ICMP.</li>
+                    </ul>
+                </div>
+
+                <div class="info-box" style="margin-top: 20px;">
+                    <strong>💡 Gestión de Firewall:</strong>
+                    <ul style="margin: 10px 0 0 20px; line-height: 1.8;">
+                        <li><strong>START/STOP:</strong> Usa el menú principal para activar/desactivar el firewall</li>
+                        <li><strong>CONFIG WHITELIST:</strong> Configurar reglas de whitelist, aislar/desaislar y restringir/desrestringir</li>
                         <li><strong>STATUS:</strong> Ver estado detallado y reglas de iptables activas</li>
                     </ul>
                 </div>
             `;
 
             document.getElementById('content').innerHTML = html;
+            console.log('[DEBUG] Tabla renderizada exitosamente');
         }
 
         // Cargar configuración al iniciar

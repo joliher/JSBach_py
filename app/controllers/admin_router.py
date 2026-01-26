@@ -165,4 +165,6 @@ def execute_module_action(module_name: str, action: str, params: Optional[dict] 
 @router.post("/{module_name}")
 async def admin_module(module_name: str, req: ModuleRequest, _: None = Depends(require_login)):
     success, message = execute_module_action(module_name=module_name, action=req.action, params=req.params)
+    if not success:
+        raise HTTPException(status_code=400, detail=message)
     return {"success": success, "message": message}

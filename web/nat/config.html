@@ -129,6 +129,11 @@
             <div class="wan-details" id="wan-details"></div>
         </div>
 
+        <div class="wan-info-box" id="nat-info-container" style="display: none; background: #d1f2eb; border-color: #17a2b8; color: #004085;">
+            <strong>🔄 Interfaz NAT Configurada:</strong>
+            <div class="wan-details" id="nat-details"></div>
+        </div>
+
         <form id="natForm">
             <div class="form-group">
                 <label for="interface">Interfaz</label>
@@ -205,8 +210,37 @@ async function loadWanInterface() {
     }
 }
 
+/* -----------------------------
+   Cargar interfaz NAT
+----------------------------- */
+async function loadNatInterface() {
+    try {
+        const response = await fetch("/admin/config/nat/nat.json", {
+            credentials: "include"
+        });
+        
+        if (response.ok) {
+            const natConfig = await response.json();
+            const natInterface = natConfig.interface || "No configurada";
+            const natStatus = natConfig.status === 1 ? "Activo" : "Inactivo";
+            
+            document.getElementById("nat-details").textContent = `${natInterface} (Estado: ${natStatus})`;
+            document.getElementById("nat-info-container").style.display = "block";
+            
+            // Pre-rellenar el campo de interfaz con la configuración actual
+            if (natInterface !== "No configurada") {
+                document.getElementById("interface").value = natInterface;
+            }
+        }
+    } catch (err) {
+        console.error("Error cargando configuración NAT:", err);
+    }
+}
+
 // Cargar interfaz WAN al iniciar
 loadWanInterface();
+// Cargar interfaz NAT al iniciar
+loadNatInterface();
 
 form.addEventListener("submit", async (e) => {
     e.preventDefault();
@@ -242,6 +276,9 @@ form.addEventListener("submit", async (e) => {
         }
 
         showSuccess(data.message);
+        
+        // Actualizar la información de la interfaz NAT configurada
+        await loadNatInterface();
 
     } catch (err) {
         showError(err.message);

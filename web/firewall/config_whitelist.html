@@ -12,7 +12,7 @@
             min-height: 100vh;
         }
         .container {
-            max-width: 900px;
+            max-width: 1200px;
             margin: 0 auto;
             background: rgba(255, 255, 255, 0.95);
             padding: 30px;
@@ -33,31 +33,31 @@
         }
         .vlan-card {
             background: #f8f9fa;
-            border: 1px solid #dee2e6;
+            border: 2.5px solid #333;
             border-radius: 8px;
-            margin: 15px 0;
-            padding: 20px;
+            margin: 20px 0;
+            padding: 25px;
             transition: all 0.3s;
         }
         .vlan-card:hover {
-            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            box-shadow: 0 6px 16px rgba(0,0,0,0.15);
         }
         .vlan-header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 15px;
-            padding-bottom: 10px;
-            border-bottom: 2px solid #dee2e6;
+            margin-bottom: 18px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #333;
         }
         .vlan-title {
-            font-size: 18px;
+            font-size: 20px;
             font-weight: bold;
             color: #333;
         }
         .vlan-info {
-            font-size: 14px;
-            color: #666;
+            font-size: 15px;
+            color: #555;
             margin-top: 5px;
         }
         .toggle-container {
@@ -207,7 +207,12 @@
 </head>
 <body>
     <div class="container">
-        <h2>🔐 Configuración de Whitelist por VLAN</h2>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+            <h2 style="margin: 0;">🔐 Configuración de Whitelist por VLAN</h2>
+            <button class="btn-add" onclick="resetDefaults()" style="background: #6f42c1; height: fit-content; padding: 12px 20px; font-size: 14px; font-weight: bold;">
+                🔄 Reset a Valores Por Defecto
+            </button>
+        </div>
         
         <div class="info-box">
             <strong>ℹ️ Información:</strong> La whitelist permite bloquear todo el tráfico excepto los destinos permitidos.<br>
@@ -233,8 +238,8 @@
         async function loadConfig() {
             console.log('=== Iniciando loadConfig ===');
             try {
-                console.log('Haciendo fetch a /config/firewall/firewall.json');
-                const response = await fetch('/config/firewall/firewall.json', {
+                console.log('Haciendo fetch a /admin/config/firewall/firewall.json');
+                const response = await fetch('/admin/config/firewall/firewall.json', {
                     credentials: 'include'
                 });
                 
@@ -298,15 +303,17 @@
 
             let html = '';
             
-            // Renderizar VLANs especiales (solo aislamiento)
+            // Renderizar VLANs especiales (aislamiento + restricción)
             if (specialVlanIds.length > 0) {
                 console.log('Renderizando VLANs especiales...');
-                html += '<h3 style="color: #667eea; margin-top: 0;">🔐 VLANs Especiales (Solo Aislamiento)</h3>';
+                html += '<h3 style="color: #667eea; margin-top: 0;">🔐 VLANs Especiales (Aislamiento + Restricción)</h3>';
                 
                 specialVlanIds.forEach(vlanId => {
                     const vlan = vlans[vlanId];
                     const isolated = vlan.isolated || false;
+                    const restricted = vlan.restricted || false;
                     const isVlan1 = (vlanId == 1);
+                    const isolationDisabled = isVlan1;
 
                     html += `
                         <div class="vlan-card" id="vlan-${vlanId}" style="border-left: 4px solid ${isVlan1 ? '#c0392b' : '#e74c3c'};">
@@ -317,31 +324,32 @@
                                         <span class="status-badge ${isolated ? 'status-disabled' : 'status-enabled'}">
                                             ${isolated ? '🚫 AISLADA' : '✅ ACTIVA'}
                                         </span>
+                                        ${restricted ? '<span class="status-badge status-warning" style="margin-left: 5px; background: #ff9800; color: white;">⛔ RESTRINGIDA</span>' : ''}
                                     </div>
                                     <div class="vlan-info">
                                         IP: ${vlan.ip || 'N/A'} | Estado: ${vlan.enabled ? 'Activa' : 'Inactiva'}
                                     </div>
                                 </div>
-                                <div>
-                                    ${isVlan1 ? `
-                                        <span style="color: #999; font-style: italic; margin-right: 10px;">
-                                            Siempre aislada
-                                        </span>
-                                    ` : `
-                                        <button class="btn-add" 
-                                                onclick="toggleIsolation(${vlanId}, ${isolated})"
-                                                style="margin-right: 10px; ${isolated ? 'background: #28a745;' : 'background: #dc3545;'}">
-                                            ${isolated ? '🔓 Desaislar' : '🔒 Aislar'}
-                                        </button>
-                                    `}
+                                <div style="display: flex; align-items: center; gap: 10px;">
+                                    <button class="btn-add" 
+                                            onclick="toggleRestriction(${vlanId}, ${restricted})"
+                                            style="${restricted ? 'background: #28a745;' : 'background: #ff9800;'}">
+                                        ${restricted ? '✓ Desrestringir' : '⛔ Restringir'}
+                                    </button>
+                                    <button class="btn-add" 
+                                            onclick="${!isolationDisabled ? `toggleIsolation(${vlanId}, ${isolated})` : 'return false;'}"
+                                            ${isolationDisabled ? 'disabled title="VLAN 1 se aísla automáticamente y no puede alternarse"' : ''}
+                                            style="${isolated || isolationDisabled ? 'background: #28a745;' : 'background: #dc3545;'}; ${isolationDisabled ? 'opacity:0.6; cursor:not-allowed;' : ''}">
+                                        ${isolationDisabled ? '🔓 Desaislar' : (isolated ? '🔓 Desaislar' : '🔒 Aislar')}
+                                    </button>
                                 </div>
                             </div>
                             
-                            <div class="${isVlan1 ? 'warning-box' : 'info-box'}" style="margin-top: 15px;">
-                                <strong>${isVlan1 ? '⚠️' : 'ℹ️'} VLAN ${vlanId}:</strong> 
+                            <div class="info-box" style="margin-top: 15px;">
+                                <strong>ℹ️ VLAN ${vlanId}:</strong> 
                                 ${isVlan1 
-                                    ? 'Esta VLAN está siempre aislada cuando el firewall está activo. Bloquea tráfico ENTRANTE (desde fuera hacia VLAN 1), pero permite tráfico SALIENTE (desde VLAN 1 hacia fuera). No permite configuración de whitelist.'
-                                    : 'Esta VLAN no permite configuración de whitelist. Solo puede ser aislada o desaislada para bloquear/permitir nuevas conexiones salientes.'
+                                    ? 'Esta VLAN se aísla automáticamente en la primera inicialización. Bloquea tráfico ENTRANTE (desde fuera hacia VLAN 1), pero permite tráfico SALIENTE (desde VLAN 1 hacia fuera). Puedes restringir esta VLAN para bloquear acceso al router desde esta red.'
+                                    : 'Esta VLAN puede ser aislada para bloquear nuevas conexiones, o restringida para bloquear acceso al router. Puedes combinar ambas configuraciones.'
                                 }
                             </div>
                         </div>
@@ -359,6 +367,7 @@
                 const vlan = vlans[vlanId];
                 const enabled = vlan.whitelist_enabled || false;
                 const isolated = vlan.isolated || false;
+                const restricted = vlan.restricted || false;
                 const whitelist = vlan.whitelist || [];
 
                 html += `
@@ -371,12 +380,18 @@
                                         ${enabled ? '🔒 WHITELIST ACTIVA' : '🔓 WHITELIST INACTIVA'}
                                     </span>
                                     ${isolated ? '<span class="status-badge status-inactive" style="margin-left: 5px;">🚫 AISLADA</span>' : ''}
+                                    ${restricted ? '<span class="status-badge status-warning" style="margin-left: 5px; background: #ff9800; color: white;">⛔ RESTRINGIDA</span>' : ''}
                                 </div>
                                 <div class="vlan-info">
                                     IP: ${vlan.ip || 'N/A'} | Estado: ${vlan.enabled ? 'Activa' : 'Inactiva'}
                                 </div>
                             </div>
                             <div style="display: flex; align-items: center; gap: 10px;">
+                                <button class="btn-add" 
+                                        onclick="toggleRestriction(${vlanId}, ${restricted})"
+                                        style="${restricted ? 'background: #28a745;' : 'background: #ff9800;'}">
+                                    ${restricted ? '✓ Desrestringir' : '⛔ Restringir'}
+                                </button>
                                 <button class="btn-add" 
                                         onclick="toggleIsolation(${vlanId}, ${isolated})"
                                         style="${isolated ? 'background: #28a745;' : 'background: #dc3545;'}">
@@ -578,6 +593,10 @@
         }
 
         async function toggleIsolation(vlanId, currentlyIsolated) {
+            if (parseInt(vlanId) === 1) {
+                alert('VLAN 1 se aísla automáticamente al iniciar el firewall y no se puede alternar desde la web.');
+                return;
+            }
             const action = currentlyIsolated ? 'desaislar' : 'aislar';
             const actionText = currentlyIsolated ? 'desaislar' : 'aislar';
             
@@ -612,6 +631,89 @@
                 }
             } catch (error) {
                 console.error(`Error ${actionText}ndo VLAN:`, error);
+                alert('Error de conexión al servidor');
+            }
+        }
+
+        async function toggleRestriction(vlanId, currentlyRestricted) {
+            const action = currentlyRestricted ? 'unrestrict' : 'restrict';
+            const actionText = currentlyRestricted ? 'desrestringir' : 'restringir';
+            
+            const confirmMsg = currentlyRestricted 
+                ? `¿Desrestringir la VLAN ${vlanId}?\n\nEsto permitirá el acceso al router desde esta VLAN.`
+                : `¿Restringir la VLAN ${vlanId}?\n\nEsto bloqueará el acceso al router desde esta VLAN.\nSe permitirá DHCP e ICMP (ping), pero se bloqueará el resto.`;
+            
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+
+            console.log(`${action} VLAN ${vlanId}`);
+
+            try {
+                const response = await fetch('/admin/firewall', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        action: action,
+                        params: {
+                            vlan_id: parseInt(vlanId)
+                        }
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    firewallConfig.vlans[vlanId].restricted = !currentlyRestricted;
+                    renderVLANs();
+                    alert(result.message || `VLAN ${vlanId} ${actionText}da correctamente`);
+                    console.log(`VLAN ${vlanId} ${actionText}da successfully`);
+                } else {
+                    alert('Error: ' + (result.message || `No se pudo ${actionText} la VLAN`));
+                }
+            } catch (error) {
+                console.error(`Error ${actionText}endo VLAN:`, error);
+                alert('Error de conexión al servidor');
+            }
+        }
+
+        async function resetDefaults() {
+            const confirmMsg = `¿Restaurar FIREWALL a Valores Por Defecto?\n\n` +
+                `VLAN 1: isolated=true, restricted=false\n` +
+                `Otras VLANs: restricted=true\n\n` +
+                `El firewall se reiniciará para aplicar los cambios.`;
+            
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+
+            console.log('Enviando reset_defaults al backend...');
+
+            try {
+                const response = await fetch('/admin/firewall', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({
+                        action: 'reset_defaults',
+                        params: {}
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    alert('Firewall restaurado a valores por defecto y reiniciado correctamente.');
+                    // Recargar configuración
+                    setTimeout(() => {
+                        loadConfig();
+                    }, 2000);
+                } else {
+                    alert('Error: ' + (result.message || 'No se pudo restaurar los valores por defecto'));
+                }
+            } catch (error) {
+                console.error('Error al resetear:', error);
                 alert('Error de conexión al servidor');
             }
         }

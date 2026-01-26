@@ -97,11 +97,35 @@
             color: #721c24;
             border: 1px solid #f5c6cb;
         }
+        .wan-info-box {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #856404;
+        }
+        .wan-info-box strong {
+            display: block;
+            margin-bottom: 8px;
+        }
+        .wan-details {
+            font-family: 'Courier New', monospace;
+            background: rgba(0, 0, 0, 0.05);
+            padding: 8px;
+            border-radius: 4px;
+            margin-top: 5px;
+        }
     </style>
 </head>
 <body>
     <div class="container">
         <h2>🌐 Configuración WAN</h2>
+
+        <div class="wan-info-box" id="wan-info-container" style="display: none;">
+            <strong>🌐 Interfaz WAN Configurada:</strong>
+            <div class="wan-details" id="wan-details"></div>
+        </div>
 
         <div class="warning-box">
             <strong>⚠️ ADVERTENCIA IMPORTANTE:</strong><br>
@@ -194,6 +218,51 @@ const modeSelect = document.getElementById("mode");
 const manualFields = document.getElementById("manualFields");
 const resultDiv = document.getElementById("result");
 
+/* -----------------------------
+   Cargar configuración WAN
+----------------------------- */
+async function loadWanConfiguration() {
+    try {
+        const response = await fetch("/admin/config/wan/wan.json", {
+            credentials: "include"
+        });
+        
+        if (response.ok) {
+            const wanConfig = await response.json();
+            const wanInterface = wanConfig.interface || "No configurada";
+            const wanMode = wanConfig.mode || "No definido";
+            const wanStatus = wanConfig.status === 1 ? "Activo" : "Inactivo";
+            
+            let details = `${wanInterface} (Modo: ${wanMode}, Estado: ${wanStatus})`;
+            
+            document.getElementById("wan-details").textContent = details;
+            document.getElementById("wan-info-container").style.display = "block";
+            
+            // Pre-rellenar el formulario con la configuración actual
+            if (wanInterface !== "No configurada") {
+                document.getElementById("interface").value = wanInterface;
+            }
+            
+            if (wanMode === "manual" || wanMode === "dhcp") {
+                document.getElementById("mode").value = wanMode;
+                manualFields.classList.toggle("hidden", wanMode !== "manual");
+                
+                if (wanMode === "manual") {
+                    document.getElementById("ip").value = wanConfig.ip || "";
+                    document.getElementById("mask").value = wanConfig.mask || "";
+                    document.getElementById("gateway").value = wanConfig.gateway || "";
+                    document.getElementById("dns").value = wanConfig.dns || "";
+                }
+            }
+        }
+    } catch (err) {
+        console.error("Error cargando configuración WAN:", err);
+    }
+}
+
+// Cargar configuración WAN al iniciar
+loadWanConfiguration();
+
 modeSelect.addEventListener("change", () => {
     manualFields.classList.toggle(
         "hidden",
@@ -262,6 +331,9 @@ form.addEventListener("submit", async (e) => {
         }
 
         showSuccess(data.message);
+        
+        // Actualizar la información de la interfaz WAN configurada
+        await loadWanConfiguration();
 
     } catch (err) {
         showError(err.message);

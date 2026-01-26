@@ -64,6 +64,24 @@
             border-color: #ffc107;
             color: #856404;
         }
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            background-color: #e9ecef;
+        }
+        button:disabled:hover {
+            background-color: #e9ecef;
+        }
+        .dependency-warning {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 6px;
+            padding: 8px 10px;
+            margin: 10px 0;
+            font-size: 12px;
+            color: #856404;
+            display: none;
+        }
     </style>
 </head>
 <body>
@@ -71,6 +89,10 @@
 <h3>📡 DMZ</h3>
 
 <div class="status-box" id="module-status">Estado: Cargando...</div>
+
+<div class="dependency-warning" id="wan-warning">
+    ⚠️ La WAN debe estar configurada antes de iniciar la DMZ
+</div>
 
 <!-- Acciones principales -->
 <button id="btnStart" onclick="executeAction('start', this)">🚀 DMZ START</button>
@@ -142,10 +164,11 @@ window.onload = function() {
     fetchModuleStatus();
 };
 
-// Función para obtener el estado del módulo con polling adaptativo
-let lastStatus = '';
-let pollInterval = 2000;
+// Variables para polling adaptativo
+let wanConfigured = false;
+let lastStatus = null;
 let unchangedCount = 0;
+let pollInterval = 2000;
 let statusTimerId = null;
 
 function fetchModuleStatus() {
@@ -153,7 +176,26 @@ function fetchModuleStatus() {
         .then(response => response.json())
         .then(data => {
             const status = data['dmz'] || 'DESCONOCIDO';
+            const wanStatus = data['wan'] || 'DESCONOCIDO';
             
+            // Verificar si WAN está configurada
+            wanConfigured = (wanStatus !== 'DESCONOCIDO' && wanStatus !== 'ERROR');
+            
+            // Deshabilitar botón START si WAN no está configurada
+            const btnStart = document.getElementById('btnStart');
+            const wanWarning = document.getElementById('wan-warning');
+            
+            if (!wanConfigured) {
+                btnStart.disabled = true;
+                btnStart.title = 'La WAN debe estar configurada primero';
+                wanWarning.style.display = 'block';
+            } else {
+                btnStart.disabled = false;
+                btnStart.title = '';
+                wanWarning.style.display = 'none';
+            }
+            
+            // Actualizar UI de estado con polling adaptativo
             if (status === lastStatus) {
                 // Si no cambió, ralentizar gradualmente
                 unchangedCount++;

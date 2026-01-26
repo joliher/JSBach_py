@@ -193,6 +193,25 @@ firewall add_rule {"vlan_id": 10, "rule": "4.4.4.4"}
 firewall remove_rule {"vlan_id": 10, "rule": "4.4.4.4"}
 ```
 
+### Restricción de VLANs (botón RESTRINGIR)
+
+Bloquea el acceso al router (INPUT) desde una VLAN.
+
+- **VLAN 1 y 2**: bloqueo total hacia el router.
+- **Otras VLANs**: solo se permiten DHCP (67/68 UDP), DNS (53 TCP/UDP) e ICMP; todo lo demás se bloquea.
+- Compatible con aislamiento y whitelist (se evalúa en `INPUT_RESTRICTIONS`).
+
+#### Restringir una VLAN
+```bash
+firewall restrict {"vlan_id": 20}
+```
+
+#### Quitar restricción
+```bash
+firewall unrestrict {"vlan_id": 20}
+```
+
+
 ### Aislamiento de VLANs
 
 #### Aislar VLAN (sin acceso a internet)

@@ -50,6 +50,51 @@ def _run_command(cmd: list) -> Tuple[bool, str]:
         logger.error(f"Error inesperado ejecutando comando {' '.join(full_cmd)}: {e}")
         return False, f"Error inesperado: {str(e)}"
 
+
+def _ensure_security_chain():
+    """Crear cadena SECURITY_DROPS_DMZ si no existe y vincularla a FORWARD.
+    GARANTIZA que SECURITY_DROPS_DMZ esté después de SECURITY_DROPS_FIREWALL.
+    """
+    # Verificar si la cadena existe
+    success, _ = _run_command(["iptables", "-L", "SECURITY_DROPS_DMZ", "-n"])
+    
+    if not success:
+        # Crear cadena
+        _run_command(["iptables", "-N", "SECURITY_DROPS_DMZ"])
+        logger.info("Cadena SECURITY_DROPS_DMZ creada")
+    
+    # Verificar posiciones de ambas cadenas en FORWARD
+    success, output = _run_command(["iptables", "-L", "FORWARD", "-n", "--line-numbers"])
+    
+    firewall_pos = None
+    dmz_pos = None
+    
+    if success:
+        lines = output.strip().split('\n')
+        for line in lines:
+            parts = line.split()
+            if parts and parts[0].isdigit():
+                position = int(parts[0])
+                if 'SECURITY_DROPS_FIREWALL' in line:
+                    firewall_pos = position
+                elif 'SECURITY_DROPS_DMZ' in line:
+                    dmz_pos = position
+    
+    # Si DMZ no está vinculada, vincularla
+    if dmz_pos is None:
+        # Determinar posición: después de FIREWALL si existe, sino en posición 1
+        target_pos = firewall_pos + 1 if firewall_pos else 1
+        _run_command(["iptables", "-I", "FORWARD", str(target_pos), "-j", "SECURITY_DROPS_DMZ"])
+        logger.info(f"Cadena SECURITY_DROPS_DMZ vinculada a FORWARD en posición {target_pos}")
+    else:
+        # DMZ está vinculada, verificar orden correcto
+        if firewall_pos and dmz_pos <= firewall_pos:
+            # DMZ está antes o al mismo nivel que FIREWALL, reposicionar
+            logger.warning(f"SECURITY_DROPS_DMZ en posición {dmz_pos} (antes de FIREWALL en {firewall_pos}), reposicionando")
+            _run_command(["iptables", "-D", "FORWARD", "-j", "SECURITY_DROPS_DMZ"])
+            _run_command(["iptables", "-I", "FORWARD", str(firewall_pos + 1), "-j", "SECURITY_DROPS_DMZ"])
+            logger.info(f"Cadena SECURITY_DROPS_DMZ reposicionada después de FIREWALL")
+
 # Config file
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 CONFIG_FILE = os.path.join(BASE_DIR, "config", "dmz", "dmz.json")
@@ -155,6 +200,14 @@ def _load_vlans_config() -> Optional[dict]:
     except Exception as e:
         logger.error(f"Error cargando VLANs config: {e}")
         return None
+
+
+def _check_wan_configured() -> bool:
+    """Verificar si la WAN está configurada (tiene interfaz asignada)."""
+    wan_cfg = _load_wan_config()
+    if not wan_cfg:
+        return False
+    return bool(wan_cfg.get("interface"))
 
 
 def _check_vlans_active() -> bool:
@@ -325,6 +378,13 @@ def start(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     create_module_config_directory("dmz")
     create_module_log_directory("dmz")
     
+    # Verificar que WAN esté configurada (dependencia obligatoria)
+    if not _check_wan_configured():
+        msg = "Error: la WAN debe estar configurada antes de iniciar la DMZ"
+        logger.error(msg)
+        _write_log(f"❌ ERROR: {msg}")
+        return False, msg
+    
     # Verificar que VLANs estén activas
     if not _check_vlans_active():
         msg = "Error: las VLANs deben estar activas para iniciar DMZ"
@@ -454,7 +514,28 @@ def stop(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     
     # Cargar configuración
     dmz_cfg = _load_config()
-    destinations = dmz_cfg.get("destinations", [])    
+    destinations = dmz_cfg.get("destinations", [])
+    
+    # Limpiar reglas de DMZ en SECURITY_DROPS_DMZ (destinos aislados)
+    _write_log(f"Limpiando reglas de aislamiento de DMZ en SECURITY_DROPS_DMZ...")
+    for dest in destinations:
+        if dest.get("isolated", False):
+            ip = dest["ip"]
+            # Eliminar regla de SECURITY_DROPS_DMZ
+            success_drop, _ = _run_command([
+                "iptables", "-D", "SECURITY_DROPS_DMZ", "-s", ip,
+                "-m", "conntrack", "--ctstate", "NEW", "-j", "DROP"
+            ])
+            if success_drop:
+                _write_log(f"✓ Regla de aislamiento eliminada de SECURITY_DROPS_DMZ para {ip}")
+            
+            # Eliminar regla de INPUT
+            _run_command([
+                "iptables", "-D", "INPUT", "-s", ip,
+                "-m", "conntrack", "--ctstate", "NEW", "-j", "DROP"
+            ])
+            logger.info(f"Reglas de aislamiento eliminadas para {ip}")
+    
     _write_log(f"Eliminando reglas DNAT de {len(destinations)} destino(s)...")    
     if not destinations:
         dmz_cfg["status"] = 0
@@ -488,6 +569,29 @@ def stop(params: Dict[str, Any] = None) -> Tuple[bool, str]:
         _write_log(f"✓ Cadena {chain_name} no existía")
     else:
         _write_log(f"⚠️ Error eliminando cadena {chain_name}: {output}")
+    
+    # Limpiar y eliminar cadena SECURITY_DROPS_DMZ
+    logger.info("Limpiando cadena SECURITY_DROPS_DMZ...")
+    
+    # Desvincular SECURITY_DROPS_DMZ de FORWARD
+    for attempt in range(5):
+        success, _ = _run_command([
+            "iptables", "-D", "FORWARD", "-j", "SECURITY_DROPS_DMZ"
+        ])
+        if not success:
+            break
+        logger.info(f"Regla FORWARD → SECURITY_DROPS_DMZ eliminada (intento {attempt + 1})")
+    
+    # Limpiar todas las reglas de SECURITY_DROPS_DMZ
+    success, _ = _run_command(["iptables", "-F", "SECURITY_DROPS_DMZ"])
+    if success:
+        logger.info("Cadena SECURITY_DROPS_DMZ limpiada")
+    
+    # Eliminar cadena SECURITY_DROPS_DMZ
+    success, _ = _run_command(["iptables", "-X", "SECURITY_DROPS_DMZ"])
+    if success:
+        logger.info("Cadena SECURITY_DROPS_DMZ eliminada")
+        results.append("Cadena SECURITY_DROPS_DMZ eliminada")
     
     # Eliminar aislamientos si existen
     for dest in destinations:
@@ -668,9 +772,12 @@ def aislar(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     if target_dest.get("isolated", False):
         return True, f"Destino {ip}:{port}/{protocol} ya estaba aislado"
     
-    # Verificar si la regla FORWARD ya existe (bloquear tráfico desde esta IP)
+    # Asegurar que existe la cadena de seguridad
+    _ensure_security_chain()
+    
+    # Verificar si la regla SECURITY_DROPS_DMZ ya existe (bloquear tráfico desde esta IP)
     check_forward = _run_command([
-        "iptables", "-C", "FORWARD", "-s", ip,
+        "iptables", "-C", "SECURITY_DROPS_DMZ", "-s", ip,
         "-m", "conntrack", "--ctstate", "NEW", "-j", "DROP"
     ])[0]
     
@@ -679,19 +786,19 @@ def aislar(params: Dict[str, Any] = None) -> Tuple[bool, str]:
         _save_config(dmz_cfg)
         return True, f"Destino {ip}:{port}/{protocol} ya estaba aislado"
     
-    # Añadir regla de aislamiento en FORWARD (bloquear tráfico desde esta IP)
+    # Añadir regla de aislamiento en SECURITY_DROPS_DMZ (bloquear tráfico desde esta IP)
     cmd_forward = [
-        "iptables", "-I", "FORWARD", "1", "-s", ip,
+        "iptables", "-I", "SECURITY_DROPS_DMZ", "1", "-s", ip,
         "-m", "conntrack", "--ctstate", "NEW", "-j", "DROP"
     ]
     
     success_forward, output_forward = _run_command(cmd_forward)
     
     if not success_forward:
-        logger.error(f"Error aislando {ip} en FORWARD: {output_forward}")
+        logger.error(f"Error aislando {ip} en SECURITY_DROPS_DMZ: {output_forward}")
         return False, f"Error al aislar {ip}: {output_forward}"
     
-    logger.info(f"Regla FORWARD añadida para aislar {ip}")
+    logger.info(f"Regla SECURITY_DROPS_DMZ añadida para aislar {ip}")
     
     # Añadir regla de aislamiento en INPUT (bloquear tráfico desde esta IP hacia el router)
     check_input = _run_command([
@@ -789,18 +896,18 @@ def desaislar(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     if not target_dest.get("isolated", False):
         return True, f"Destino {ip}:{port}/{protocol} no estaba aislado"
     
-    # Eliminar regla de aislamiento de FORWARD
+    # Eliminar regla de aislamiento de SECURITY_DROPS_DMZ
     cmd_forward = [
-        "iptables", "-D", "FORWARD", "-s", ip,
+        "iptables", "-D", "SECURITY_DROPS_DMZ", "-s", ip,
         "-m", "conntrack", "--ctstate", "NEW", "-j", "DROP"
     ]
     
     success_forward, output_forward = _run_command(cmd_forward)
     
     if not success_forward:
-        logger.warning(f"Error desaislando {ip} de FORWARD: {output_forward}")
+        logger.warning(f"Error desaislando {ip} de SECURITY_DROPS_DMZ: {output_forward}")
     else:
-        logger.info(f"Regla FORWARD eliminada para {ip}")
+        logger.info(f"Regla SECURITY_DROPS_DMZ eliminada para {ip}")
     
     # Eliminar regla de aislamiento de INPUT
     cmd_input = [
