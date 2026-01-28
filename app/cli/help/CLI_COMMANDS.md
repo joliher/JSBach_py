@@ -214,15 +214,27 @@ firewall unrestrict {"vlan_id": 20}
 
 ### Aislamiento de VLANs
 
+El aislamiento bloquea completamente el acceso a Internet desde una VLAN.
+
 #### Aislar VLAN (sin acceso a internet)
 ```bash
 firewall aislar {"vlan_id": 20}
 ```
 
+**Funcionamiento:**
+- Inserta DROP en FORWARD_PROTECTION posición 1
+- Prioridad MÁXIMA sobre whitelist y otras reglas
+- Bloquea TODO el tráfico hacia Internet
+- La VLAN mantiene comunicación interna
+
 #### Desaislar VLAN (restaurar acceso)
 ```bash
 firewall desaislar {"vlan_id": 20}
 ```
+
+**Funcionamiento:**
+- Elimina la regla DROP de FORWARD_PROTECTION
+- Restaura acceso según configuración (whitelist si estaba activa)
 
 ---
 
@@ -264,17 +276,32 @@ dmz config {"ip": "192.168.3.10", "port": 80, "protocol": "tcp"}
 dmz eliminar {"ip": "192.168.3.10", "port": 80, "protocol": "tcp"}
 ```
 
-### Aislamiento de destinos
+### Aislamiento de hosts DMZ
 
-#### Aislar destino (deshabilitar temporalmente)
+El aislamiento de un host DMZ lo bloquea COMPLETAMENTE (bidireccional).
+
+#### Aislar host DMZ
 ```bash
-dmz aislar {"ip": "192.168.3.10", "port": 80, "protocol": "tcp"}
+dmz aislar {"ip": "10.0.5.50"}
 ```
 
-#### Desaislar destino (restaurar)
+**Funcionamiento:**
+- DROP en FORWARD_PROTECTION (-d IP): Bloquea tráfico HACIA el host
+- DROP en INPUT (-s IP): Bloquea tráfico DESDE el host hacia router
+- Aislamiento COMPLETO: el host no puede comunicarse
+- Útil para contener hosts comprometidos inmediatamente
+- Prioridad MÁXIMA sobre DMZ y whitelist
+
+**Nota:** Solo requiere la IP del host, no puerto ni protocolo.
+
+#### Desaislar host DMZ
 ```bash
-dmz desaislar {"ip": "192.168.3.10", "port": 80, "protocol": "tcp"}
+dmz desaislar {"ip": "10.0.5.50"}
 ```
+
+**Funcionamiento:**
+- Elimina DROP de FORWARD_PROTECTION e INPUT
+- Restaura funcionalidad normal del host DMZ
 
 ---
 

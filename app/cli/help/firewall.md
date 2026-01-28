@@ -23,10 +23,16 @@ Ejemplo:
   firewall start
 
 ### firewall stop
-Detener el firewall (eliminar reglas)
+Detener el firewall (eliminar todas las reglas)
 
 Ejemplo:
   firewall stop
+
+Funcionalidad:
+  - Elimina todas las cadenas FORWARD_VLAN_X
+  - Elimina reglas de aislamiento de VLANs
+  - Elimina reglas de restricción (INPUT_RESTRICTIONS)
+  - Limpieza completa del firewall
 
 ### firewall restart
 Reiniciar el firewall
@@ -82,6 +88,12 @@ Ejemplo:
 Parámetros:
   - vlan_id: ID de la VLAN a aislar
 
+Funcionalidad:
+  - Inserta regla DROP en FORWARD_PROTECTION (posición 1)
+  - Bloquea TODO el tráfico hacia Internet desde esa VLAN
+  - Prioridad MÁXIMA sobre whitelist y otras reglas
+  - Útil para contener amenazas o realizar mantenimiento
+
 ### firewall desaislar
 Desaislar una VLAN (restaurar acceso)
 
@@ -90,6 +102,11 @@ Ejemplo:
 
 Parámetros:
   - vlan_id: ID de la VLAN a desaislar
+
+Funcionalidad:
+  - Elimina la regla DROP de FORWARD_PROTECTION
+  - Restaura el acceso a Internet según configuración
+  - La whitelist (si estaba habilitada) vuelve a aplicarse
 
 ### firewall restrict
 Restringir acceso al router (INPUT) desde una VLAN.

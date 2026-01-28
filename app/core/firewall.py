@@ -1,34 +1,41 @@
-# app/core/firewall.py - Versión simplificada
+# app/core/firewall.py
+# Módulo de Firewall - Arquitectura jerárquica con cadenas por VLAN
+# VERSION 2.0 - Refactorización completa
 
 import subprocess
 import json
 import os
 import logging
 from typing import Dict, Any, Tuple, List
-from ..utils.global_functions import create_module_config_directory, create_module_log_directory, log_action
+from ..utils.global_functions import (
+    create_module_config_directory,
+    create_module_log_directory,
+    log_action
+)
 
 # Configurar logging
 logger = logging.getLogger(__name__)
 
-# Directorios
+# Rutas de configuración
 BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
-CONFIG_DIR = os.path.join(BASE_DIR, "config", "firewall")
+FIREWALL_CONFIG_FILE = os.path.join(BASE_DIR, "config", "firewall", "firewall.json")
 VLANS_CONFIG_FILE = os.path.join(BASE_DIR, "config", "vlans", "vlans.json")
 WAN_CONFIG_FILE = os.path.join(BASE_DIR, "config", "wan", "wan.json")
-FIREWALL_CONFIG_FILE = os.path.join(CONFIG_DIR, "firewall.json")
 
-# -----------------------------
-# Utilidades
-# -----------------------------
+
+# =============================================================================
+# UTILIDADES BÁSICAS
+# =============================================================================
 
 def _ensure_dirs():
-    """Crear directorios necesarios."""
-    os.makedirs(CONFIG_DIR, exist_ok=True)
-    os.makedirs(os.path.join(BASE_DIR, "logs", "firewall"), exist_ok=True)
+    """Crear directorios necesarios para configuración y logs."""
+    os.makedirs(os.path.dirname(FIREWALL_CONFIG_FILE), exist_ok=True)
+    create_module_log_directory("firewall")
+    create_module_config_directory("firewall")
 
 
 def _load_vlans_config() -> dict:
-    """Cargar configuración de VLANs."""
+    """Cargar configuración de VLANs desde vlans.json."""
     if not os.path.exists(VLANS_CONFIG_FILE):
         return {"vlans": [], "status": 0}
     try:
@@ -40,7 +47,7 @@ def _load_vlans_config() -> dict:
 
 
 def _load_firewall_config() -> dict:
-    """Cargar configuración del firewall."""
+    """Cargar configuración del firewall desde firewall.json."""
     if not os.path.exists(FIREWALL_CONFIG_FILE):
         return {"vlans": {}, "status": 0}
     try:
@@ -49,6 +56,17 @@ def _load_firewall_config() -> dict:
     except Exception as e:
         logger.error(f"Error cargando firewall config: {e}")
         return {"vlans": {}, "status": 0}
+
+
+def _save_firewall_config(data: dict) -> None:
+    """Guardar configuración del firewall en firewall.json."""
+    _ensure_dirs()
+    try:
+        with open(FIREWALL_CONFIG_FILE, "w") as f:
+            json.dump(data, f, indent=4)
+        logger.info("Configuración guardada correctamente")
+    except Exception as e:
+        logger.error(f"Error guardando configuración: {e}")
 
 
 def _load_wan_config() -> dict:
@@ -71,25 +89,13 @@ def _check_wan_configured() -> bool:
     return bool(wan_cfg.get("interface"))
 
 
-def _save_firewall_config(data: dict) -> None:
-    """Guardar configuración del firewall."""
-    _ensure_dirs()
-    try:
-        with open(FIREWALL_CONFIG_FILE, "w") as f:
-            json.dump(data, f, indent=4)
-        logger.info("Configuración guardada correctamente")
-    except Exception as e:
-        logger.error(f"Error guardando configuración: {e}")
-
-
 def _run_command(cmd: list) -> Tuple[bool, str]:
-    """Ejecutar comando con timeout y logging."""
+    """Ejecutar comando iptables con timeout y logging."""
     cmd_str = " ".join(cmd)
-    logger.info(f"Ejecutando: {cmd_str}")
+    logger.debug(f"Ejecutando: {cmd_str}")
     
     try:
-        # Usar sudo -n para evitar prompt de contraseña
-        full_cmd = ["sudo", "-n"] + cmd
+        full_cmd = ["/usr/bin/sudo", "-n"] + cmd
         result = subprocess.run(
             full_cmd,
             capture_output=True,
@@ -99,7 +105,6 @@ def _run_command(cmd: list) -> Tuple[bool, str]:
         )
         
         if result.returncode == 0:
-            logger.info(f"Comando exitoso: {cmd_str}")
             return True, result.stdout
         else:
             error_msg = result.stderr.strip() or "Comando falló sin mensaje de error"
@@ -116,70 +121,33 @@ def _run_command(cmd: list) -> Tuple[bool, str]:
         return False, error_msg
 
 
-def _ensure_security_chain():
-    """Crear cadena SECURITY_DROPS_FIREWALL si no existe y vincularla a FORWARD.
-    GARANTIZA que SECURITY_DROPS_FIREWALL esté en posición 1 de FORWARD.
-    """
-    # Verificar si la cadena existe
-    success, _ = _run_command(["iptables", "-L", "SECURITY_DROPS_FIREWALL", "-n"])
-    
-    if not success:
-        # Crear cadena
-        _run_command(["iptables", "-N", "SECURITY_DROPS_FIREWALL"])
-        logger.info("Cadena SECURITY_DROPS_FIREWALL creada")
-    
-    # Verificar si ya está vinculada a FORWARD
-    success, output = _run_command([
-        "iptables", "-C", "FORWARD", "-j", "SECURITY_DROPS_FIREWALL"
-    ])
-    
-    if not success:
-        # No está vinculada, vincular en posición 1
-        _run_command(["iptables", "-I", "FORWARD", "1", "-j", "SECURITY_DROPS_FIREWALL"])
-        logger.info("Cadena SECURITY_DROPS_FIREWALL vinculada a FORWARD en posición 1")
-    else:
-        # Ya está vinculada, verificar que esté en posición 1
-        success, output = _run_command(["iptables", "-L", "FORWARD", "-n", "--line-numbers"])
-        if success:
-            lines = output.strip().split('\n')
-            for line in lines:
-                if 'SECURITY_DROPS_FIREWALL' in line:
-                    parts = line.split()
-                    if parts and parts[0].isdigit():
-                        position = int(parts[0])
-                        if position != 1:
-                            # Está en posición incorrecta, reposicionar
-                            logger.warning(f"SECURITY_DROPS_FIREWALL en posición {position}, reposicionando a 1")
-                            _run_command(["iptables", "-D", "FORWARD", "-j", "SECURITY_DROPS_FIREWALL"])
-                            _run_command(["iptables", "-I", "FORWARD", "1", "-j", "SECURITY_DROPS_FIREWALL"])
-                            logger.info("Cadena SECURITY_DROPS_FIREWALL reposicionada a posición 1")
-                    break
-
+# =============================================================================
+# GESTIÓN DE CADENAS PROTEGIDAS (POSICIONES FIJAS)
+# =============================================================================
 
 def _ensure_input_protection_chain():
-    """Crear cadena INPUT_PROTECTION para reglas de protección WAN.
-    GARANTIZA que INPUT_PROTECTION esté en posición 1 de INPUT.
+    """Crear cadena INPUT_PROTECTION y garantizar que esté en posición 1 de INPUT.
+    Esta cadena protege el router desde WAN.
     """
     # Verificar si la cadena existe
-    success, _ = _run_command(["iptables", "-L", "INPUT_PROTECTION", "-n"])
+    success, _ = _run_command(["/usr/sbin/iptables", "-L", "INPUT_PROTECTION", "-n"])
     
     if not success:
-        # Crear cadena
-        _run_command(["iptables", "-N", "INPUT_PROTECTION"])
+        _run_command(["/usr/sbin/iptables", "-N", "INPUT_PROTECTION"])
         logger.info("Cadena INPUT_PROTECTION creada")
     
-    # Verificar si ya está vinculada a INPUT
-    success, output = _run_command([
-        "iptables", "-C", "INPUT", "-j", "INPUT_PROTECTION"
+    # Verificar si está vinculada a INPUT
+    success, _ = _run_command([
+        "/usr/sbin/iptables", "-C", "INPUT", "-j", "INPUT_PROTECTION"
     ])
     
     if not success:
         # No está vinculada, vincular en posición 1
-        _run_command(["iptables", "-I", "INPUT", "1", "-j", "INPUT_PROTECTION"])
+        _run_command(["/usr/sbin/iptables", "-I", "INPUT", "1", "-j", "INPUT_PROTECTION"])
         logger.info("Cadena INPUT_PROTECTION vinculada a INPUT en posición 1")
     else:
         # Ya está vinculada, verificar que esté en posición 1
-        success, output = _run_command(["iptables", "-L", "INPUT", "-n", "--line-numbers"])
+        success, output = _run_command(["/usr/sbin/iptables", "-L", "INPUT", "-n", "--line-numbers"])
         if success:
             lines = output.strip().split('\n')
             for line in lines:
@@ -188,222 +156,343 @@ def _ensure_input_protection_chain():
                     if parts and parts[0].isdigit():
                         position = int(parts[0])
                         if position != 1:
-                            # Está en posición incorrecta, reposicionar
                             logger.warning(f"INPUT_PROTECTION en posición {position}, reposicionando a 1")
-                            _run_command(["iptables", "-D", "INPUT", "-j", "INPUT_PROTECTION"])
-                            _run_command(["iptables", "-I", "INPUT", "1", "-j", "INPUT_PROTECTION"])
+                            _run_command(["/usr/sbin/iptables", "-D", "INPUT", "-j", "INPUT_PROTECTION"])
+                            _run_command(["/usr/sbin/iptables", "-I", "INPUT", "1", "-j", "INPUT_PROTECTION"])
                             logger.info("Cadena INPUT_PROTECTION reposicionada a posición 1")
                     break
 
 
-def _ensure_input_restriction_chain():
-    """Crear cadena INPUT_RESTRICTIONS para restricciones de VLANs.
-    GARANTIZA que INPUT_RESTRICTIONS esté en posición 2 de INPUT (después de INPUT_PROTECTION).
+def _ensure_forward_protection_chain():
+    """Crear cadena FORWARD_PROTECTION y garantizar que esté en posición 1 de FORWARD.
+    Esta cadena contiene reglas de aislamiento de VLANs.
     """
     # Verificar si la cadena existe
-    success, _ = _run_command(["iptables", "-L", "INPUT_RESTRICTIONS", "-n"])
+    success, _ = _run_command(["/usr/sbin/iptables", "-L", "FORWARD_PROTECTION", "-n"])
     
     if not success:
-        # Crear cadena
-        _run_command(["iptables", "-N", "INPUT_RESTRICTIONS"])
-        logger.info("Cadena INPUT_RESTRICTIONS creada")
+        _run_command(["/usr/sbin/iptables", "-N", "FORWARD_PROTECTION"])
+        logger.info("Cadena FORWARD_PROTECTION creada")
     
-    # Verificar posición de ambas cadenas en INPUT
-    success, output = _run_command(["iptables", "-L", "INPUT", "-n", "--line-numbers"])
+    # Verificar si está vinculada a FORWARD
+    success, _ = _run_command([
+        "/usr/sbin/iptables", "-C", "FORWARD", "-j", "FORWARD_PROTECTION"
+    ])
     
-    protection_pos = None
-    restriction_pos = None
-    
-    if success:
-        lines = output.strip().split('\n')
-        for line in lines:
-            parts = line.split()
-            if parts and parts[0].isdigit():
-                position = int(parts[0])
-                if 'INPUT_PROTECTION' in line:
-                    protection_pos = position
-                elif 'INPUT_RESTRICTIONS' in line:
-                    restriction_pos = position
-    
-    # Si RESTRICTIONS no está vinculada, vincularla
-    if restriction_pos is None:
-        # Determinar posición: después de PROTECTION si existe, sino en posición 1
-        target_pos = protection_pos + 1 if protection_pos else 1
-        _run_command(["iptables", "-I", "INPUT", str(target_pos), "-j", "INPUT_RESTRICTIONS"])
-        logger.info(f"Cadena INPUT_RESTRICTIONS vinculada a INPUT en posición {target_pos}")
+    if not success:
+        # No está vinculada, vincular en posición 1
+        _run_command(["/usr/sbin/iptables", "-I", "FORWARD", "1", "-j", "FORWARD_PROTECTION"])
+        logger.info("Cadena FORWARD_PROTECTION vinculada a FORWARD en posición 1")
     else:
-        # RESTRICTIONS está vinculada, verificar orden correcto
-        if protection_pos and restriction_pos <= protection_pos:
-            # RESTRICTIONS está antes o al mismo nivel que PROTECTION, reposicionar
-            logger.warning(f"INPUT_RESTRICTIONS en posición {restriction_pos} (antes de PROTECTION en {protection_pos}), reposicionando")
-            _run_command(["iptables", "-D", "INPUT", "-j", "INPUT_RESTRICTIONS"])
-            _run_command(["iptables", "-I", "INPUT", str(protection_pos + 1), "-j", "INPUT_RESTRICTIONS"])
-            logger.info(f"Cadena INPUT_RESTRICTIONS reposicionada después de INPUT_PROTECTION")
-
-
-def _get_wan_interface() -> str:
-    """Obtener la interfaz WAN de la configuración."""
-    if not os.path.exists(WAN_CONFIG_FILE):
-        return None
-    try:
-        with open(WAN_CONFIG_FILE, "r") as f:
-            wan_cfg = json.load(f)
-            return wan_cfg.get("interface")
-    except Exception as e:
-        logger.error(f"Error cargando WAN config: {e}")
-        return None
+        # Ya está vinculada, verificar que esté en posición 1
+        success, output = _run_command(["/usr/sbin/iptables", "-L", "FORWARD", "-n", "--line-numbers"])
+        if success:
+            lines = output.strip().split('\n')
+            for line in lines:
+                if 'FORWARD_PROTECTION' in line:
+                    parts = line.split()
+                    if parts and parts[0].isdigit():
+                        position = int(parts[0])
+                        if position != 1:
+                            logger.warning(f"FORWARD_PROTECTION en posición {position}, reposicionando a 1")
+                            _run_command(["/usr/sbin/iptables", "-D", "FORWARD", "-j", "FORWARD_PROTECTION"])
+                            _run_command(["/usr/sbin/iptables", "-I", "FORWARD", "1", "-j", "FORWARD_PROTECTION"])
+                            logger.info("Cadena FORWARD_PROTECTION reposicionada a posición 1")
+                    break
 
 
 def _setup_wan_protection():
-    """Proteger el router desde WAN: permitir solo ICMP (ping), bloquear todo lo demás.
-    Usa cadena INPUT_PROTECTION para garantizar evaluación controlada.
-    """
-    wan_if = _get_wan_interface()
-    
-    if not wan_if:
-        logger.warning("No se pudo obtener interfaz WAN, saltando protección WAN")
+    """Configurar protección del router desde WAN (solo ICMP permitido)."""
+    wan_cfg = _load_wan_config()
+    if not wan_cfg or not wan_cfg.get("interface"):
         return
     
-    logger.info(f"Configurando protección WAN en interfaz {wan_if}")
+    wan_interface = wan_cfg["interface"]
     
-    # Asegurar que la cadena INPUT_PROTECTION existe y está bien posicionada
-    _ensure_input_protection_chain()
+    # Limpiar cadena INPUT_PROTECTION
+    _run_command(["/usr/sbin/iptables", "-F", "INPUT_PROTECTION"])
     
-    # Limpiar reglas existentes en INPUT_PROTECTION
-    _run_command(["iptables", "-F", "INPUT_PROTECTION"])
+    # Permitir ICMP desde WAN
+    _run_command([
+        "/usr/sbin/iptables", "-A", "INPUT_PROTECTION", "-i", wan_interface, 
+        "-p", "icmp", "-j", "ACCEPT"
+    ])
     
-    # Permitir ICMP (ping) desde WAN en posición 1
-    success = _run_command([
-        "iptables", "-I", "INPUT_PROTECTION", "1", "-i", wan_if, "-p", "icmp", "--icmp-type", "echo-request", "-j", "ACCEPT"
-    ])[0]
-    if success:
-        logger.info(f"✓ Permitido ICMP (ping) desde WAN ({wan_if})")
-    else:
-        logger.error(f"Error permitiendo ICMP desde WAN")
-        return
+    # Bloquear todo lo demás desde WAN
+    _run_command([
+        "/usr/sbin/iptables", "-A", "INPUT_PROTECTION", "-i", wan_interface, "-j", "DROP"
+    ])
     
-    # Bloquear todo lo demás desde WAN (append al final de la cadena)
-    success = _run_command([
-        "iptables", "-A", "INPUT_PROTECTION", "-i", wan_if, "-j", "DROP"
-    ])[0]
-    if success:
-        logger.info(f"✓ Bloqueado todo tráfico desde WAN ({wan_if}) excepto ICMP")
-    else:
-        logger.error(f"Error bloqueando tráfico desde WAN")
-        return
-    
-    logger.info("Protección WAN configurada correctamente en cadena INPUT_PROTECTION")
+    logger.info(f"Protección WAN configurada en {wan_interface}")
 
 
-def _apply_whitelist(vlan_id: int, whitelist: List[str]) -> Tuple[bool, str]:
-    """Aplicar whitelist a una cadena VLAN (solo permite destinos especificados)."""
-    chain_name = f"VLAN_{vlan_id}"
+# =============================================================================
+# GESTIÓN DE CADENAS POR VLAN
+# =============================================================================
+
+def _create_input_vlan_chain(vlan_id: int, vlan_ip: str) -> bool:
+    """Crear cadena INPUT_VLAN_X y vincularla desde INPUT."""
+    chain_name = f"INPUT_VLAN_{vlan_id}"
     
-    logger.info(f"Aplicando whitelist a VLAN {vlan_id} con {len(whitelist)} reglas")
+    # Crear cadena
+    success, output = _run_command(["/usr/sbin/iptables", "-N", chain_name])
+    if not success and "already exists" not in output.lower():
+        logger.error(f"Error creando {chain_name}: {output}")
+        return False
     
-    # Limpiar reglas actuales de la cadena
+    # Limpiar reglas existentes
     _run_command(["/usr/sbin/iptables", "-F", chain_name])
     
-    # Añadir reglas de whitelist
-    for rule in whitelist:
-        rule = rule.strip()
-        if not rule:
-            continue
-        
-        # Detectar protocolo (formato: regla/tcp o regla/udp)
-        protocol = None
-        if rule.endswith('/tcp'):
-            protocol = 'tcp'
-            rule = rule[:-4]
-        elif rule.endswith('/udp'):
-            protocol = 'udp'
-            rule = rule[:-4]
-        
-        # Parsear regla
-        if rule.startswith(':'):
-            # Formato: ":puerto" o ":puerto/protocolo" - cualquier IP hacia un puerto
-            port = rule[1:]
-            if protocol:
-                # Puerto específico con protocolo
-                cmd = ["/usr/sbin/iptables", "-A", chain_name, "-p", protocol, "--dport", port, "-j", "ACCEPT"]
-            else:
-                # Puerto con ambos protocolos (tcp y udp)
-                _run_command(["/usr/sbin/iptables", "-A", chain_name, "-p", "tcp", "--dport", port, "-j", "ACCEPT"])
-                cmd = ["/usr/sbin/iptables", "-A", chain_name, "-p", "udp", "--dport", port, "-j", "ACCEPT"]
-            success, error = _run_command(cmd)
-            if not success:
-                logger.warning(f"Error aplicando regla {rule}: {error}")
-                
-        elif ':' in rule:
-            # Formato: "ip:puerto" con o sin protocolo
-            ip, port = rule.split(':', 1)
-            if protocol:
-                # IP:puerto con protocolo específico
-                cmd = ["/usr/sbin/iptables", "-A", chain_name, "-d", ip, "-p", protocol, "--dport", port, "-j", "ACCEPT"]
-            else:
-                # IP:puerto con ambos protocolos
-                _run_command(["/usr/sbin/iptables", "-A", chain_name, "-d", ip, "-p", "tcp", "--dport", port, "-j", "ACCEPT"])
-                cmd = ["/usr/sbin/iptables", "-A", chain_name, "-d", ip, "-p", "udp", "--dport", port, "-j", "ACCEPT"]
-            success, error = _run_command(cmd)
-            if not success:
-                logger.warning(f"Error aplicando regla {rule}: {error}")
-                
-        else:
-            # Formato: solo "ip" con o sin protocolo
-            if protocol:
-                cmd = ["/usr/sbin/iptables", "-A", chain_name, "-d", rule, "-p", protocol, "-j", "ACCEPT"]
-            else:
-                cmd = ["/usr/sbin/iptables", "-A", chain_name, "-d", rule, "-j", "ACCEPT"]
-            success, error = _run_command(cmd)
-            if not success:
-                logger.warning(f"Error aplicando regla {rule}: {error}")
+    # Vincular desde INPUT (después de INPUT_PROTECTION)
+    # Verificar si ya está vinculada
+    success, _ = _run_command([
+        "/usr/sbin/iptables", "-C", "INPUT", "-s", vlan_ip, "-j", chain_name
+    ])
     
-    # Regla por defecto: DROP todo lo demás
-    success, error = _run_command(["/usr/sbin/iptables", "-A", chain_name, "-j", "DROP"])
     if not success:
-        logger.error(f"Error añadiendo regla DROP: {error}")
-        return False, error
+        # No está vinculada, añadir después de INPUT_PROTECTION (posición 2)
+        _run_command([
+            "/usr/sbin/iptables", "-I", "INPUT", "2", "-s", vlan_ip, "-j", chain_name
+        ])
+        logger.info(f"{chain_name} vinculada desde INPUT")
     
-    logger.info(f"Whitelist aplicada exitosamente a VLAN {vlan_id}")
-    return True, "Whitelist aplicada correctamente"
+    return True
 
 
-def _remove_whitelist(vlan_id: int) -> Tuple[bool, str]:
-    """Remover whitelist de una VLAN (permite todo el tráfico)."""
-    chain_name = f"VLAN_{vlan_id}"
+def _create_forward_vlan_chain(vlan_id: int, vlan_ip: str) -> bool:
+    """Crear cadena FORWARD_VLAN_X y vincularla desde FORWARD."""
+    chain_name = f"FORWARD_VLAN_{vlan_id}"
     
-    logger.info(f"Removiendo whitelist de VLAN {vlan_id}")
+    # Crear cadena
+    success, output = _run_command(["/usr/sbin/iptables", "-N", chain_name])
+    if not success and "already exists" not in output.lower():
+        logger.error(f"Error creando {chain_name}: {output}")
+        return False
     
-    # Limpiar todas las reglas de la cadena
+    # Limpiar reglas existentes
     _run_command(["/usr/sbin/iptables", "-F", chain_name])
     
-    # Volver a ACCEPT por defecto
+    # Por defecto: ACCEPT todo (sin whitelist)
     _run_command(["/usr/sbin/iptables", "-A", chain_name, "-j", "ACCEPT"])
     
-    logger.info(f"Whitelist removida, tráfico ACCEPT por defecto")
-    return True, "Whitelist deshabilitada"
+    # Vincular desde FORWARD (después de FORWARD_PROTECTION)
+    # Verificar si ya está vinculada
+    success, _ = _run_command([
+        "/usr/sbin/iptables", "-C", "FORWARD", "-s", vlan_ip, "-j", chain_name
+    ])
+    
+    if not success:
+        # No está vinculada, añadir después de FORWARD_PROTECTION (posición 2)
+        _run_command([
+            "/usr/sbin/iptables", "-I", "FORWARD", "2", "-s", vlan_ip, "-j", chain_name
+        ])
+        logger.info(f"{chain_name} vinculada desde FORWARD")
+    
+    return True
 
 
-# -----------------------------
-# Funciones principales
-# -----------------------------
+def _remove_input_vlan_chain(vlan_id: int, vlan_ip: str):
+    """Desvincular y eliminar cadena INPUT_VLAN_X."""
+    chain_name = f"INPUT_VLAN_{vlan_id}"
+    
+    # Desvincular desde INPUT
+    _run_command([
+        "/usr/sbin/iptables", "-D", "INPUT", "-s", vlan_ip, "-j", chain_name
+    ])
+    
+    # Limpiar y eliminar cadena
+    _run_command(["/usr/sbin/iptables", "-F", chain_name])
+    _run_command(["/usr/sbin/iptables", "-X", chain_name])
+    
+    logger.info(f"{chain_name} eliminada")
+
+
+def _remove_forward_vlan_chain(vlan_id: int, vlan_ip: str):
+    """Desvincular y eliminar cadena FORWARD_VLAN_X."""
+    chain_name = f"FORWARD_VLAN_{vlan_id}"
+    
+    # Desvincular desde FORWARD
+    _run_command([
+        "/usr/sbin/iptables", "-D", "FORWARD", "-s", vlan_ip, "-j", chain_name
+    ])
+    
+    # Limpiar y eliminar cadena
+    _run_command(["/usr/sbin/iptables", "-F", chain_name])
+    _run_command(["/usr/sbin/iptables", "-X", chain_name])
+    
+    logger.info(f"{chain_name} eliminada")
+
+
+# =============================================================================
+# APLICAR WHITELIST
+# =============================================================================
+
+def _apply_whitelist(vlan_id: int, whitelist: List[str]) -> Tuple[bool, str]:
+    """Aplicar whitelist en cadena FORWARD_VLAN_X.
+    
+    Formatos soportados:
+    - IP: 8.8.8.8
+    - IP/proto: 8.8.8.8/tcp
+    - IP:puerto: 192.168.1.1:80
+    - IP:puerto/proto: 8.8.8.8:53/udp
+    - :puerto: :443
+    - :puerto/proto: :22/tcp
+    """
+    chain_name = f"FORWARD_VLAN_{vlan_id}"
+    
+    # FIX BUG #6: Preservar reglas DMZ ACCEPT antes de limpiar
+    # Cargar dmz.json para identificar IPs DMZ reales
+    dmz_ips = set()
+    try:
+        dmz_cfg_path = os.path.join(BASE_DIR, "config", "dmz", "dmz.json")
+        if os.path.exists(dmz_cfg_path):
+            with open(dmz_cfg_path, "r") as f:
+                dmz_cfg = json.load(f)
+                for dest in dmz_cfg.get("destinations", []):
+                    dmz_ips.add(dest.get("ip"))
+    except Exception as e:
+        logger.warning(f"No se pudo cargar dmz.json: {e}")
+    
+    # Buscar reglas ACCEPT con IPs DMZ reales
+    dmz_rules = []
+    success, output = _run_command(["/usr/sbin/iptables", "-L", chain_name, "-n", "--line-numbers"])
+    if success:
+        for line in output.split('\n'):
+            # Buscar reglas ACCEPT con destino específico
+            if 'ACCEPT' in line:
+                parts = line.split()
+                # Verificar suficientes campos y destino no es 0.0.0.0/0
+                if len(parts) >= 6 and parts[5] != '0.0.0.0/0':
+                    dest_ip = parts[5]
+                    # Solo preservar si está en dmz_ips
+                    if dest_ip in dmz_ips:
+                        dmz_rules.append(dest_ip)
+                        logger.info(f"Preservando regla DMZ ACCEPT para {dest_ip}")
+    
+    # Limpiar cadena
+    _run_command(["/usr/sbin/iptables", "-F", chain_name])
+    
+    # Re-añadir reglas DMZ ACCEPT al inicio
+    for dmz_ip in dmz_rules:
+        _run_command(["/usr/sbin/iptables", "-A", chain_name, "-d", dmz_ip, "-j", "ACCEPT"])
+        logger.info(f"Regla DMZ ACCEPT restaurada para {dmz_ip}")
+    
+    if not whitelist:
+        # Sin reglas, DROP por defecto
+        _run_command(["/usr/sbin/iptables", "-A", chain_name, "-j", "DROP"])
+        return True, "Whitelist vacía, todo bloqueado"
+    
+    for rule in whitelist:
+        success = _apply_single_whitelist_rule(chain_name, rule)
+        if not success:
+            logger.warning(f"Error aplicando regla whitelist: {rule}")
+    
+    # DROP final para bloquear todo lo no permitido
+    # Nota: No verificamos si existe porque _apply_whitelist siempre hace FLUSH antes
+    _run_command(["/usr/sbin/iptables", "-A", chain_name, "-j", "DROP"])
+    logger.debug(f"Regla DROP añadida al final de {chain_name}")
+    
+    return True, f"Whitelist aplicada con {len(whitelist)} reglas"
+
+
+def _apply_single_whitelist_rule(chain_name: str, rule: str) -> bool:
+    """Aplicar una regla de whitelist individual."""
+    try:
+        # Parsear regla: IP[:puerto][/proto]
+        ip = None
+        port = None
+        protocol = None
+        
+        if "/" in rule:
+            rule, protocol = rule.rsplit("/", 1)
+        
+        if ":" in rule:
+            ip, port = rule.split(":", 1)
+            if not ip:  # :puerto
+                ip = None
+        else:
+            ip = rule if rule else None
+        
+        # Construir comandos para verificación y adición
+        if port and protocol:
+            # Caso: IP:puerto/proto o :puerto/proto
+            check_cmd = ["/usr/sbin/iptables", "-C", chain_name]
+            add_cmd = ["/usr/sbin/iptables", "-A", chain_name]
+            
+            if ip:
+                check_cmd.extend(["-d", ip])
+                add_cmd.extend(["-d", ip])
+            
+            check_cmd.extend(["-p", protocol, "--dport", port, "-j", "ACCEPT"])
+            add_cmd.extend(["-p", protocol, "--dport", port, "-j", "ACCEPT"])
+            
+            success, _ = _run_command(check_cmd)
+            if not success:
+                _run_command(add_cmd)
+            
+        elif port:
+            # Caso: IP:puerto o :puerto (sin protocolo → TCP + UDP)
+            for proto in ["tcp", "udp"]:
+                check_cmd = ["/usr/sbin/iptables", "-C", chain_name]
+                add_cmd = ["/usr/sbin/iptables", "-A", chain_name]
+                
+                if ip:
+                    check_cmd.extend(["-d", ip])
+                    add_cmd.extend(["-d", ip])
+                
+                check_cmd.extend(["-p", proto, "--dport", port, "-j", "ACCEPT"])
+                add_cmd.extend(["-p", proto, "--dport", port, "-j", "ACCEPT"])
+                
+                success, _ = _run_command(check_cmd)
+                if not success:
+                    _run_command(add_cmd)
+                    
+        elif protocol and ip:
+            # Caso: IP/proto (sin puerto)
+            check_cmd = ["/usr/sbin/iptables", "-C", chain_name, "-d", ip, "-p", protocol, "-j", "ACCEPT"]
+            add_cmd = ["/usr/sbin/iptables", "-A", chain_name, "-d", ip, "-p", protocol, "-j", "ACCEPT"]
+            
+            success, _ = _run_command(check_cmd)
+            if not success:
+                _run_command(add_cmd)
+                
+        elif ip:
+            # Caso: solo IP (sin puerto ni protocolo)
+            check_cmd = ["/usr/sbin/iptables", "-C", chain_name, "-d", ip, "-j", "ACCEPT"]
+            add_cmd = ["/usr/sbin/iptables", "-A", chain_name, "-d", ip, "-j", "ACCEPT"]
+            
+            success, _ = _run_command(check_cmd)
+            if not success:
+                _run_command(add_cmd)
+        else:
+            # Caso: :puerto (sin IP ni protocolo, ya manejado arriba)
+            logger.warning(f"Regla malformada: {rule}")
+            return False
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"Error parseando regla whitelist '{rule}': {e}")
+        return False
+
+
+# =============================================================================
+# FUNCIONES PRINCIPALES
+# =============================================================================
 
 def start(params: Dict[str, Any] = None) -> Tuple[bool, str]:
-    """Iniciar firewall - habilitar cadenas de iptables por VLAN."""
+    """Iniciar firewall con nueva arquitectura jerárquica."""
     logger.info("=== INICIO: firewall start ===")
     _ensure_dirs()
     
-    # Verificar que WAN esté configurada (dependencia obligatoria)
+    # Verificar WAN configurada
     if not _check_wan_configured():
         msg = "Error: la WAN debe estar configurada antes de iniciar el firewall"
         logger.error(msg)
-        log_action("firewall", "start", "error", msg)
+        log_action("firewall", f"start - ERROR: {msg}", "ERROR")
         return False, msg
     
-    # Crear directorio de logs y asegurar permisos
-    create_module_log_directory("firewall")
-    create_module_config_directory("firewall")
-    
+    # Cargar VLANs desde vlans.json
     vlans_cfg = _load_vlans_config()
     vlans = vlans_cfg.get("vlans", [])
     
@@ -412,41 +501,32 @@ def start(params: Dict[str, Any] = None) -> Tuple[bool, str]:
         logger.warning(msg)
         return False, msg
     
-    # Asegurar que existe la cadena de seguridad
-    _ensure_security_chain()
-    
-    # Asegurar que existen las cadenas de protección INPUT
+    # Crear cadenas protegidas (posiciones fijas)
     _ensure_input_protection_chain()
-    _ensure_input_restriction_chain()
-    
-    # Proteger el router desde WAN (permitir solo ping, bloquear resto)
+    _ensure_forward_protection_chain()
     _setup_wan_protection()
     
+    # Cargar configuración del firewall
     fw_cfg = _load_firewall_config()
     if "vlans" not in fw_cfg:
         fw_cfg["vlans"] = {}
     
-    # Limpiar reglas anteriores del firewall (solo las cadenas VLAN)
-    # NO tocar SECURITY_DROPS ni reglas de otros módulos
-    for vlan_id in list(fw_cfg.get("vlans", {}).keys()):
-        chain_name = f"VLAN_{vlan_id}"
-        vlan_ip = fw_cfg["vlans"][vlan_id].get("ip", "")
-        
-        # Desvincular de FORWARD si existe
-        if vlan_ip:
-            _run_command([
-                "iptables", "-D", "FORWARD", "-s", vlan_ip, "-j", chain_name
-            ])
-        
-        # Limpiar y eliminar cadena
-        _run_command(["/usr/sbin/iptables", "-F", chain_name])
-        _run_command(["/usr/sbin/iptables", "-X", chain_name])
+    # Sincronizar: eliminar VLANs obsoletas de firewall.json
+    active_vlan_ids = {str(vlan.get("id")) for vlan in vlans if vlan.get("id") is not None}
+    vlans_to_remove = [vid for vid in fw_cfg["vlans"].keys() if vid not in active_vlan_ids]
     
-    logger.info("Cadenas VLAN anteriores limpiadas, SECURITY_DROPS preservada")
+    for vlan_id in vlans_to_remove:
+        logger.info(f"Eliminando VLAN {vlan_id} obsoleta de firewall.json")
+        vlan_ip = fw_cfg["vlans"][vlan_id].get("ip", "")
+        if vlan_ip:
+            _remove_input_vlan_chain(int(vlan_id), vlan_ip)
+            _remove_forward_vlan_chain(int(vlan_id), vlan_ip)
+        del fw_cfg["vlans"][vlan_id]
     
     results = []
     errors = []
     
+    # Procesar cada VLAN
     for vlan in vlans:
         vlan_id = vlan.get("id")
         vlan_name = vlan.get("name", "")
@@ -458,140 +538,91 @@ def start(params: Dict[str, Any] = None) -> Tuple[bool, str]:
             errors.append(f"VLAN {vlan_id}: Sin IP de red configurada")
             continue
         
-        # Usar la dirección de red completa con máscara para las reglas
-        network_address = vlan_ip_network  # Ya viene como 192.168.x.0/24 del config
-        
-        # Crear cadena personalizada para esta VLAN
-        chain_name = f"VLAN_{vlan_id}"
-        
-        # Crear nueva cadena
-        success, output = _run_command(["/usr/sbin/iptables", "-N", chain_name])
-        if not success and "already exists" not in output.lower():
-            errors.append(f"VLAN {vlan_id}: Error creando cadena")
+        # Crear cadenas INPUT_VLAN_X y FORWARD_VLAN_X
+        if not _create_input_vlan_chain(vlan_id, vlan_ip_network):
+            errors.append(f"VLAN {vlan_id}: Error creando cadena INPUT")
             continue
         
-        # Limpiar reglas existentes de la cadena
-        _run_command(["/usr/sbin/iptables", "-F", chain_name])
+        if not _create_forward_vlan_chain(vlan_id, vlan_ip_network):
+            errors.append(f"VLAN {vlan_id}: Error creando cadena FORWARD")
+            continue
         
-        # Verificar si hay configuración previa con whitelist
-        vlan_cfg = fw_cfg.get("vlans", {}).get(str(vlan_id), {})
-        whitelist_enabled = vlan_cfg.get("whitelist_enabled", False)
-        whitelist = vlan_cfg.get("whitelist", [])
-        
-        # Aplicar reglas según configuración
-        if whitelist_enabled and whitelist:
-            # Aplicar whitelist
-            logger.info(f"VLAN {vlan_id}: Aplicando whitelist con {len(whitelist)} reglas")
-            success, msg = _apply_whitelist(vlan_id, whitelist)
-            if not success:
-                errors.append(f"VLAN {vlan_id}: Error aplicando whitelist - {msg}")
-        else:
-            # Regla por defecto: ACCEPT (sin firewall activo)
-            _run_command(["/usr/sbin/iptables", "-A", chain_name, "-j", "ACCEPT"])
-        
-        # Vincular cadena a FORWARD: tráfico desde esta red salta a la cadena VLAN
-        # Primero verificar si la regla ya existe
-        success, output = _run_command([
-            "iptables", "-C", "FORWARD", "-s", network_address, "-j", chain_name
-        ])
-        
-        if not success:  # La regla no existe, agregarla
-            success, output = _run_command([
-                "iptables", "-A", "FORWARD", "-s", network_address, "-j", chain_name
-            ])
-            if not success:
-                errors.append(f"VLAN {vlan_id}: Error vinculando a FORWARD")
-                logger.error(f"Error vinculando VLAN {vlan_id} a FORWARD: {output}")
-                continue
-            logger.info(f"VLAN {vlan_id}: Vinculada a FORWARD desde {network_address}")
-        else:
-            logger.info(f"VLAN {vlan_id}: Ya estaba vinculada a FORWARD")
-        
-        # Actualizar configuración (preservar whitelist si existe)
+        # Inicializar configuración en firewall.json
         if str(vlan_id) not in fw_cfg["vlans"]:
             fw_cfg["vlans"][str(vlan_id)] = {
                 "name": vlan_name,
                 "enabled": True,
                 "whitelist_enabled": False,
                 "whitelist": [],
-                "ip": network_address,
-                "isolated": False
+                "ip": vlan_ip_network,
+                "isolated": False,
+                "restricted": False
             }
         else:
-            # Preservar configuración existente, solo actualizar campos básicos
+            # Actualizar campos básicos
             fw_cfg["vlans"][str(vlan_id)]["name"] = vlan_name
             fw_cfg["vlans"][str(vlan_id)]["enabled"] = True
-            fw_cfg["vlans"][str(vlan_id)]["ip"] = network_address
-            # Resetear isolated al iniciar (excepto VLAN 1 que se aislará después)
-            if vlan_id != 1:
-                fw_cfg["vlans"][str(vlan_id)]["isolated"] = False
+            fw_cfg["vlans"][str(vlan_id)]["ip"] = vlan_ip_network
         
-        results.append(f"VLAN {vlan_id} ({vlan_name}): Cadena creada y vinculada")
+        # Aplicar whitelist si está habilitada
+        vlan_cfg = fw_cfg["vlans"][str(vlan_id)]
+        if vlan_cfg.get("whitelist_enabled", False):
+            whitelist = vlan_cfg.get("whitelist", [])
+            success, msg = _apply_whitelist(vlan_id, whitelist)
+            if not success:
+                errors.append(f"VLAN {vlan_id}: Error aplicando whitelist")
+        
+        results.append(f"VLAN {vlan_id} ({vlan_name}): Configurada")
     
-    # Guardar configuración inicial
+    # Guardar configuración
     fw_cfg["status"] = 1
     _save_firewall_config(fw_cfg)
     
-    # Aislar siempre VLAN 1 cuando el firewall está activo
+    # POLÍTICAS PREDETERMINADAS
+    # VLAN 1: Aislar automáticamente
     if "1" in fw_cfg["vlans"]:
-        vlan1_ip = fw_cfg["vlans"]["1"].get("ip", "")
-        if vlan1_ip:
-            if '/' not in vlan1_ip:
-                ip_mask = f"{vlan1_ip}/24"
-            else:
-                ip_mask = vlan1_ip
-            # Insertar/forzar reglas de aislamiento (DROP entrante hacia VLAN 1)
-            # Solo en SECURITY_DROPS_FIREWALL, no en INPUT_RESTRICTIONS para evitar duplicación
-            _run_command([
-                "iptables", "-I", "SECURITY_DROPS_FIREWALL", "1", "-d", ip_mask, "-m", "conntrack",
-                "--ctstate", "NEW", "-j", "DROP"
-            ])
-            fw_cfg["vlans"]["1"]["isolated"] = True
-            _save_firewall_config(fw_cfg)
-            results.append("VLAN 1: Aislada (forzado en start)")
-
-    # Restringir siempre todas las VLANs excepto VLAN 1 al iniciar
-    logger.info("Aplicando restricciones de VLANs (todas excepto 1)...")
+        logger.info("Aplicando política: VLAN 1 aislada por defecto")
+        success, msg = aislar({"vlan_id": 1, "from_start": True})
+        if success:
+            results.append("VLAN 1: Aislada (política predeterminada)")
+        else:
+            errors.append(f"VLAN 1: Error aislando - {msg}")
+    
+    # Resto de VLANs: Restringir automáticamente
+    logger.info("Aplicando restricciones predeterminadas a VLANs")
     applied_restrictions = []
-    for vlan_id in list(fw_cfg.get("vlans", {}).keys()):
+    for vlan_id in active_vlan_ids:
         if vlan_id == "1":
             continue
-        vlan_cfg = fw_cfg["vlans"][vlan_id]
-        vlan_cfg["restricted"] = False  # forzar ejecución de restrict
         success, msg = restrict({"vlan_id": int(vlan_id), "suppress_log": True})
         if success:
             applied_restrictions.append(vlan_id)
-            results.append(f"VLAN {vlan_id}: Restricción aplicada")
+            results.append(f"VLAN {vlan_id}: Restringida (política predeterminada)")
         else:
-            logger.warning(f"No se pudo restringir VLAN {vlan_id}: {msg}")
-
-    # Sincronizar firewall.json con las restricciones aplicadas (un solo guardado)
+            errors.append(f"VLAN {vlan_id}: Error restringiendo - {msg}")
+    
+    # Sincronizar restricted=true en JSON
     fw_cfg_final = _load_firewall_config()
     for vlan_id in applied_restrictions:
-        if vlan_id in fw_cfg_final.get("vlans", {}):
+        if vlan_id in fw_cfg_final["vlans"]:
             fw_cfg_final["vlans"][vlan_id]["restricted"] = True
     _save_firewall_config(fw_cfg_final)
-    
-    if not results:
-        msg = "No se pudo habilitar ninguna VLAN\n" + "\n".join(errors)
-        logger.error(msg)
-        log_action("firewall", f"Error en start: {msg}", "ERROR")
-        return False, msg
     
     msg = "Firewall iniciado:\n" + "\n".join(results)
     if errors:
         msg += "\n\nErrores:\n" + "\n".join(errors)
+        logger.warning("Firewall iniciado con errores")
+    else:
+        logger.info("Firewall iniciado correctamente")
     
+    log_action("firewall", f"start - {'SUCCESS' if not errors else 'PARTIAL'}", "WARNING" if errors else "INFO")
     logger.info("=== FIN: firewall start ===")
     
-    # Registrar acción exitosa en actions.log
-    log_action("firewall", f"Firewall iniciado correctamente:\n{msg}")
-    
-    return True, msg
+    return len(errors) == 0, msg
 
 
 def stop(params: Dict[str, Any] = None) -> Tuple[bool, str]:
-    """Detener firewall - eliminar cadenas de iptables."""
+    """Detener firewall - eliminar todas las cadenas de VLANs."""
     logger.info("=== INICIO: firewall stop ===")
     _ensure_dirs()
     
@@ -605,176 +636,55 @@ def stop(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     
     results = []
     
-    # Primero, eliminar todas las reglas de aislamiento y restricciones
+    # Eliminar cadenas de cada VLAN
     for vlan_id, vlan_data in vlans.items():
         vlan_ip = vlan_data.get("ip", "")
-        isolated = vlan_data.get("isolated", False)
         
-        if vlan_ip:
-            # Calcular IP/máscara
-            if '/' not in vlan_ip:
-                ip_mask = f"{vlan_ip}/24"
-            else:
-                ip_mask = vlan_ip
-            
-            # Eliminar aislamiento (todas menos VLAN 1, que permanece aislada por política)
-            if isolated and vlan_id != "1":
-                logger.info(f"Desaislando VLAN {vlan_id}...")
-                
-                _run_command([
-                    "iptables", "-D", "SECURITY_DROPS_FIREWALL", "-s", ip_mask, "-m", "conntrack", 
-                    "--ctstate", "NEW", "-j", "DROP"
-                ])
-                _run_command([
-                    "iptables", "-D", "INPUT", "-s", ip_mask, "-m", "conntrack", 
-                    "--ctstate", "NEW", "-j", "DROP"
-                ])
-                
-                vlan_data["isolated"] = False
-                logger.info(f"VLAN {vlan_id} desaislada")
-            elif vlan_id == "1" and isolated:
-                logger.info("VLAN 1 permanece aislada (política fija)")
-            
-            # Eliminar restricciones de todas las VLANs (stop debe dejar sin restricciones)
-            logger.info(f"Desrestringiendo VLAN {vlan_id}...")
-            if int(vlan_id) in [1, 2]:
-                _run_command([
-                    "iptables", "-D", "INPUT_RESTRICTIONS", "-s", ip_mask, "-j", "DROP"
-                ])
-            else:
-                _run_command([
-                    "iptables", "-D", "INPUT_RESTRICTIONS", "-s", ip_mask, "-p", "udp", "--dport", "67:68", "-j", "ACCEPT"
-                ])
-                _run_command([
-                    "iptables", "-D", "INPUT_RESTRICTIONS", "-s", ip_mask, "-p", "udp", "--dport", "53", "-j", "ACCEPT"
-                ])
-                _run_command([
-                    "iptables", "-D", "INPUT_RESTRICTIONS", "-s", ip_mask, "-p", "tcp", "--dport", "53", "-j", "ACCEPT"
-                ])
-                _run_command([
-                    "iptables", "-D", "INPUT_RESTRICTIONS", "-s", ip_mask, "-p", "icmp", "-j", "ACCEPT"
-                ])
-                _run_command([
-                    "iptables", "-D", "INPUT_RESTRICTIONS", "-s", ip_mask, "-j", "DROP"
-                ])
-            vlan_data["restricted"] = False
-            logger.info(f"VLAN {vlan_id} desrestringida")
+        if not vlan_ip:
+            continue
         
-        # Al detener: eliminar reglas iptables pero PRESERVAR la configuración en JSON
-        # Esto permite que al reiniciar se respete la configuración del usuario
-        # VLAN 1 se mantiene aislada por política fija; el resto se marca como no aislada
-    
-    # Luego, eliminar las cadenas del firewall
-    for vlan_id, vlan_data in vlans.items():
-        chain_name = f"VLAN_{vlan_id}"
-        vlan_name = vlan_data.get("name", "")
-        vlan_ip_network = vlan_data.get("ip", "")
+        # Desrestringir todas las VLANs
+        unrestrict({"vlan_id": int(vlan_id), "suppress_log": True})
         
-        logger.info(f"Eliminando cadena para VLAN {vlan_id}")
+        # Desaislar todas excepto VLAN 1
+        if vlan_id != "1" and vlan_data.get("isolated", False):
+            desaislar({"vlan_id": int(vlan_id), "suppress_log": True})
         
-        # Desvincular de FORWARD: eliminar todas las referencias a esta cadena
-        if vlan_ip_network:
-            logger.info(f"Desvinculando VLAN {vlan_id} de FORWARD (IP: {vlan_ip_network})")
-            # Intentar eliminar la regla varias veces por si hay duplicados
-            for attempt in range(5):
-                success, output = _run_command([
-                    "iptables", "-D", "FORWARD", "-s", vlan_ip_network, "-j", chain_name
-                ])
-                if not success:
-                    break  # No hay más reglas que eliminar
-                logger.info(f"Regla FORWARD eliminada (intento {attempt + 1})")
+        # Eliminar cadenas
+        _remove_input_vlan_chain(int(vlan_id), vlan_ip)
+        _remove_forward_vlan_chain(int(vlan_id), vlan_ip)
         
-        # Limpiar reglas de la cadena
-        _run_command(["/usr/sbin/iptables", "-F", chain_name])
+        # Actualizar configuración
+        vlan_data["enabled"] = False
+        vlan_data["restricted"] = False
+        if vlan_id != "1":
+            vlan_data["isolated"] = False
         
-        # Eliminar cadena
-        success, output = _run_command(["/usr/sbin/iptables", "-X", chain_name])
-        
-        # Desactivar whitelist si estaba habilitada
-        if fw_cfg["vlans"][vlan_id].get("whitelist_enabled", False):
-            fw_cfg["vlans"][vlan_id]["whitelist_enabled"] = False
-            logger.info(f"Whitelist desactivada para VLAN {vlan_id}")
-        
-        fw_cfg["vlans"][vlan_id]["enabled"] = False
-        results.append(f"VLAN {vlan_id} ({vlan_name}): Cadena eliminada y desvinculada")
+        results.append(f"VLAN {vlan_id}: Desactivada")
     
-    # Limpiar y eliminar cadena SECURITY_DROPS_FIREWALL
-    logger.info("Limpiando cadena SECURITY_DROPS_FIREWALL...")
+    # FIX BUG #7: Eliminar vínculos y cadenas protegidas
+    # Limpiar contenido
+    _run_command(["/usr/sbin/iptables", "-F", "INPUT_PROTECTION"])
+    _run_command(["/usr/sbin/iptables", "-F", "FORWARD_PROTECTION"])
     
-    # Desvincular SECURITY_DROPS_FIREWALL de FORWARD
-    for attempt in range(5):
-        success, _ = _run_command([
-            "iptables", "-D", "FORWARD", "-j", "SECURITY_DROPS_FIREWALL"
-        ])
-        if not success:
-            break  # No hay más reglas de salto
-        logger.info(f"Regla FORWARD → SECURITY_DROPS_FIREWALL eliminada (intento {attempt + 1})")
+    # Desvincular desde INPUT y FORWARD
+    _run_command(["/usr/sbin/iptables", "-D", "INPUT", "-j", "INPUT_PROTECTION"])
+    _run_command(["/usr/sbin/iptables", "-D", "FORWARD", "-j", "FORWARD_PROTECTION"])
     
-    # Limpiar todas las reglas de SECURITY_DROPS_FIREWALL
-    success, _ = _run_command(["iptables", "-F", "SECURITY_DROPS_FIREWALL"])
-    if success:
-        logger.info("Cadena SECURITY_DROPS_FIREWALL limpiada")
+    # Eliminar cadenas
+    _run_command(["/usr/sbin/iptables", "-X", "INPUT_PROTECTION"])
+    _run_command(["/usr/sbin/iptables", "-X", "FORWARD_PROTECTION"])
     
-    # Eliminar cadena SECURITY_DROPS_FIREWALL
-    success, _ = _run_command(["iptables", "-X", "SECURITY_DROPS_FIREWALL"])
-    if success:
-        logger.info("Cadena SECURITY_DROPS_FIREWALL eliminada")
-        results.append("Cadena SECURITY_DROPS_FIREWALL eliminada")
+    logger.info("Cadenas INPUT_PROTECTION y FORWARD_PROTECTION eliminadas")
     
-    # Limpiar y eliminar cadena INPUT_PROTECTION
-    logger.info("Limpiando cadena INPUT_PROTECTION...")
-    
-    # Desvincular INPUT_PROTECTION de INPUT
-    for attempt in range(5):
-        success, _ = _run_command([
-            "iptables", "-D", "INPUT", "-j", "INPUT_PROTECTION"
-        ])
-        if not success:
-            break
-        logger.info(f"Regla INPUT → INPUT_PROTECTION eliminada (intento {attempt + 1})")
-    
-    # Limpiar todas las reglas de INPUT_PROTECTION
-    success, _ = _run_command(["iptables", "-F", "INPUT_PROTECTION"])
-    if success:
-        logger.info("Cadena INPUT_PROTECTION limpiada")
-    
-    # Eliminar cadena INPUT_PROTECTION
-    success, _ = _run_command(["iptables", "-X", "INPUT_PROTECTION"])
-    if success:
-        logger.info("Cadena INPUT_PROTECTION eliminada")
-        results.append("Cadena INPUT_PROTECTION eliminada")
-    
-    # Limpiar y eliminar cadena INPUT_RESTRICTIONS
-    logger.info("Limpiando cadena INPUT_RESTRICTIONS...")
-    
-    # Desvincular INPUT_RESTRICTIONS de INPUT
-    for attempt in range(5):
-        success, _ = _run_command([
-            "iptables", "-D", "INPUT", "-j", "INPUT_RESTRICTIONS"
-        ])
-        if not success:
-            break
-        logger.info(f"Regla INPUT → INPUT_RESTRICTIONS eliminada (intento {attempt + 1})")
-    
-    # Limpiar todas las reglas de INPUT_RESTRICTIONS
-    success, _ = _run_command(["iptables", "-F", "INPUT_RESTRICTIONS"])
-    if success:
-        logger.info("Cadena INPUT_RESTRICTIONS limpiada")
-    
-    # Eliminar cadena INPUT_RESTRICTIONS
-    success, _ = _run_command(["iptables", "-X", "INPUT_RESTRICTIONS"])
-    if success:
-        logger.info("Cadena INPUT_RESTRICTIONS eliminada")
-        results.append("Cadena INPUT_RESTRICTIONS eliminada")
-    
+    # Actualizar estado
     fw_cfg["status"] = 0
     _save_firewall_config(fw_cfg)
     
     msg = "Firewall detenido:\n" + "\n".join(results)
+    logger.info("Firewall detenido correctamente")
+    log_action("firewall", f"stop - SUCCESS: {msg}", "INFO")
     logger.info("=== FIN: firewall stop ===")
-    
-    # Registrar acción en actions.log
-    log_action("firewall", msg)
     
     return True, msg
 
@@ -783,41 +693,18 @@ def restart(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     """Reiniciar firewall."""
     logger.info("=== INICIO: firewall restart ===")
     
-    # Detener
     stop_success, stop_msg = stop(params)
-    
-    # Iniciar
     start_success, start_msg = start(params)
     
     msg = f"STOP:\n{stop_msg}\n\nSTART:\n{start_msg}"
     logger.info("=== FIN: firewall restart ===")
     
-    # Nota: stop() y start() ya registran en actions.log. Evitamos duplicar entradas aquí.
     return start_success, msg
 
 
 def status(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     """Obtener estado del firewall."""
     logger.info("=== INICIO: firewall status ===")
-    
-    # Ejecutar iptables -nvL y guardar en actions.log
-    from datetime import datetime
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    log_file = os.path.join(BASE_DIR, "logs", "firewall", "actions.log")
-    
-    success, iptables_output = _run_command(["/usr/sbin/iptables", "-nvL"])
-    if success:
-        try:
-            with open(log_file, "a") as f:
-                f.write(f"\n\n{'=' * 80}\n")
-                f.write(f"📋 FIREWALL STATUS - iptables -nvL\n")
-                f.write(f"🕒 {timestamp}\n")
-                f.write(f"{'=' * 80}\n\n")
-                f.write(iptables_output)
-                f.write(f"\n{'=' * 80}\n")
-            logger.info(f"Estado de iptables guardado en {log_file}")
-        except Exception as e:
-            logger.error(f"Error guardando log: {e}")
     
     fw_cfg = _load_firewall_config()
     vlans = fw_cfg.get("vlans", {})
@@ -830,384 +717,95 @@ def status(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     lines = ["Estado del Firewall:", "=" * 50]
     
     for vlan_id, vlan_data in vlans.items():
-        chain_name = f"VLAN_{vlan_id}"
         vlan_name = vlan_data.get("name", "")
-        vlan_ip_network = vlan_data.get("ip", "")
         enabled = vlan_data.get("enabled", False)
+        isolated = vlan_data.get("isolated", False)
+        restricted = vlan_data.get("restricted", False)
         whitelist_enabled = vlan_data.get("whitelist_enabled", False)
         
         status_str = "ACTIVA" if enabled else "INACTIVA"
         lines.append(f"\nVLAN {vlan_id} ({vlan_name}): {status_str}")
-        if vlan_ip_network:
-            lines.append(f"  IP Red: {vlan_ip_network}")
-        
-        # Verificar si está vinculada a FORWARD
-        if vlan_ip_network:
-            success, output = _run_command([
-                "iptables", "-C", "FORWARD", "-s", vlan_ip_network, "-j", chain_name
-            ])
-            if success:
-                lines.append(f"  Vinculación: ACTIVA en FORWARD")
-            else:
-                lines.append(f"  Vinculación: NO vinculada a FORWARD")
-        
-        if whitelist_enabled:
-            whitelist = vlan_data.get("whitelist", [])
-            lines.append(f"  Whitelist: HABILITADA ({len(whitelist)} reglas)")
-        else:
-            lines.append(f"  Whitelist: DESHABILITADA")
-        
-        # Obtener reglas actuales de iptables
-        success, output = _run_command(["/usr/sbin/iptables", "-L", chain_name, "-n", "-v"])
-        if success and output:
-            lines.append(f"  Reglas activas:")
-            for line in output.split('\n')[2:5]:  # Primeras 3 reglas
-                if line.strip():
-                    lines.append(f"    {line.strip()}")
+        lines.append(f"  Aislada: {'SÍ' if isolated else 'NO'}")
+        lines.append(f"  Restringida: {'SÍ' if restricted else 'NO'}")
+        lines.append(f"  Whitelist: {'ACTIVA' if whitelist_enabled else 'INACTIVA'}")
     
     msg = "\n".join(lines)
     logger.info("=== FIN: firewall status ===")
     return True, msg
 
 
-def config(params: Dict[str, Any] = None) -> Tuple[bool, str]:
-    """Configurar firewall (placeholder para la interfaz web)."""
-    logger.info("Config llamado desde interfaz web")
-    return True, "Use la interfaz web para configurar el firewall"
+# =============================================================================
+# AISLAMIENTO (FORWARD_PROTECTION)
+# =============================================================================
 
-
-def enable_whitelist(params: Dict[str, Any] = None) -> Tuple[bool, str]:
-    """Habilitar whitelist en una VLAN específica."""
-    logger.info("=== INICIO: enable_whitelist ===")
-    
-    # Validar parámetros
-    if not params:
-        return False, "Error: No se proporcionaron parámetros"
-    
-    if not isinstance(params, dict):
-        return False, "Error: Los parámetros deben ser un diccionario"
-    
-    if "vlan_id" not in params:
-        return False, "Error: vlan_id requerido"
-    
-    # Validar vlan_id
-    try:
-        vlan_id = int(params["vlan_id"])
-    except (ValueError, TypeError):
-        return False, f"Error: vlan_id debe ser un número entero, recibido: {params['vlan_id']}"
-    
-    if vlan_id < 1 or vlan_id > 4094:
-        return False, f"Error: vlan_id debe estar entre 1 y 4094, recibido: {vlan_id}"
-    
-    # VLANs 1 y 2 no permiten whitelist
-    if vlan_id in (1, 2):
-        return False, f"Error: VLAN {vlan_id} no permite configuración de whitelist"
-    
-    # Validar whitelist
-    whitelist = params.get("whitelist", [])
-    
-    if isinstance(whitelist, str):
-        whitelist = [whitelist] if whitelist else []
-    elif not isinstance(whitelist, list):
-        return False, f"Error: whitelist debe ser una lista o cadena, recibido: {type(whitelist).__name__}"
-    
-    # Validar cada elemento de la whitelist
-    for i, rule in enumerate(whitelist):
-        if not isinstance(rule, str):
-            return False, f"Error: elemento {i} de whitelist debe ser una cadena, recibido: {type(rule).__name__}"
-        if not rule.strip():
-            return False, f"Error: elemento {i} de whitelist no puede estar vacío"
-    
-    fw_cfg = _load_firewall_config()
-    
-    if str(vlan_id) not in fw_cfg.get("vlans", {}):
-        return False, f"VLAN {vlan_id} no encontrada en firewall. Ejecute START primero."
-    
-    # Guardar configuración
-    fw_cfg["vlans"][str(vlan_id)]["whitelist"] = whitelist
-    fw_cfg["vlans"][str(vlan_id)]["whitelist_enabled"] = True
-    _save_firewall_config(fw_cfg)
-    
-    # Aplicar whitelist
-    success, msg = _apply_whitelist(vlan_id, whitelist)
-    
-    result_msg = f"Whitelist habilitada en VLAN {vlan_id}\n{msg}"
-    logger.info(f"=== FIN: enable_whitelist - Success: {success} ===")
-    
-    # Registrar acción en actions.log
-    if success:
-        log_action("firewall", result_msg)
-    
-    return success, result_msg
-
-
-def disable_whitelist(params: Dict[str, Any] = None) -> Tuple[bool, str]:
-    """Deshabilitar whitelist en una VLAN específica."""
-    logger.info("=== INICIO: disable_whitelist ===")
-    
-    # Validar parámetros
-    if not params:
-        return False, "Error: No se proporcionaron parámetros"
-    
-    if not isinstance(params, dict):
-        return False, "Error: Los parámetros deben ser un diccionario"
-    
-    if "vlan_id" not in params:
-        return False, "Error: vlan_id requerido"
-    
-    # Validar vlan_id
-    try:
-        vlan_id = int(params["vlan_id"])
-    except (ValueError, TypeError):
-        return False, f"Error: vlan_id debe ser un número entero, recibido: {params['vlan_id']}"
-    
-    if vlan_id < 1 or vlan_id > 4094:
-        return False, f"Error: vlan_id debe estar entre 1 y 4094, recibido: {vlan_id}"
-    
-    # VLANs 1 y 2 no permiten whitelist
-    if vlan_id in (1, 2):
-        return False, f"Error: VLAN {vlan_id} no permite configuración de whitelist"
-    
-    fw_cfg = _load_firewall_config()
-    
-    if str(vlan_id) not in fw_cfg.get("vlans", {}):
-        return False, f"VLAN {vlan_id} no encontrada en firewall"
-    
-    # Actualizar configuración
-    fw_cfg["vlans"][str(vlan_id)]["whitelist_enabled"] = False
-    _save_firewall_config(fw_cfg)
-    
-    # Remover whitelist (volver a ACCEPT)
-    success, msg = _remove_whitelist(vlan_id)
-    
-    result_msg = f"Whitelist deshabilitada en VLAN {vlan_id}\n{msg}"
-    logger.info(f"=== FIN: disable_whitelist - Success: {success} ===")
-    
-    # Registrar acción en actions.log
-    if success:
-        log_action("firewall", result_msg)
-    
-    return success, result_msg
-
-
-def add_rule(params: Dict[str, Any] = None) -> Tuple[bool, str]:
-    """Agregar una regla a la whitelist de una VLAN."""
-    logger.info("=== INICIO: add_rule ===")
-    
-    # Validar parámetros
-    if not params:
-        return False, "Error: No se proporcionaron parámetros"
-    
-    if not isinstance(params, dict):
-        return False, "Error: Los parámetros deben ser un diccionario"
-    
-    if "vlan_id" not in params:
-        return False, "Error: vlan_id requerido"
-    
-    if "rule" not in params:
-        return False, "Error: rule requerido"
-    
-    # Validar vlan_id
-    try:
-        vlan_id = int(params["vlan_id"])
-    except (ValueError, TypeError):
-        return False, f"Error: vlan_id debe ser un número entero, recibido: {params['vlan_id']}"
-    
-    if vlan_id < 1 or vlan_id > 4094:
-        return False, f"Error: vlan_id debe estar entre 1 y 4094, recibido: {vlan_id}"
-    
-    # VLANs 1 y 2 no permiten whitelist
-    if vlan_id in (1, 2):
-        return False, f"Error: VLAN {vlan_id} no permite configuración de whitelist"
-    
-    # Validar rule
-    if not isinstance(params["rule"], str):
-        return False, f"Error: rule debe ser una cadena, recibido: {type(params['rule']).__name__}"
-    
-    new_rule = params["rule"].strip()
-    
-    if not new_rule:
-        return False, "Error: regla vacía"
-    
-    fw_cfg = _load_firewall_config()
-    
-    if str(vlan_id) not in fw_cfg.get("vlans", {}):
-        return False, f"VLAN {vlan_id} no encontrada en firewall"
-    
-    # Agregar regla a la configuración
-    whitelist = fw_cfg["vlans"][str(vlan_id)].get("whitelist", [])
-    
-    if new_rule in whitelist:
-        return False, f"La regla '{new_rule}' ya existe en la whitelist"
-    
-    whitelist.append(new_rule)
-    fw_cfg["vlans"][str(vlan_id)]["whitelist"] = whitelist
-    _save_firewall_config(fw_cfg)
-    
-    # Si la whitelist está habilitada, reaplicar
-    if fw_cfg["vlans"][str(vlan_id)].get("whitelist_enabled", False):
-        success, msg = _apply_whitelist(vlan_id, whitelist)
-        if not success:
-            return False, f"Regla agregada pero error al aplicar: {msg}"
-    
-    logger.info(f"=== FIN: add_rule - Regla '{new_rule}' agregada ===")
-    return True, f"Regla '{new_rule}' agregada a VLAN {vlan_id}"
-
-
-def remove_rule(params: Dict[str, Any] = None) -> Tuple[bool, str]:
-    """Eliminar una regla de la whitelist de una VLAN."""
-    logger.info("=== INICIO: remove_rule ===")
-    
-    # Validar parámetros
-    if not params:
-        return False, "Error: No se proporcionaron parámetros"
-    
-    if not isinstance(params, dict):
-        return False, "Error: Los parámetros deben ser un diccionario"
-    
-    if "vlan_id" not in params:
-        return False, "Error: vlan_id requerido"
-    
-    if "rule" not in params:
-        return False, "Error: rule requerido"
-    
-    # Validar vlan_id
-    try:
-        vlan_id = int(params["vlan_id"])
-    except (ValueError, TypeError):
-        return False, f"Error: vlan_id debe ser un número entero, recibido: {params['vlan_id']}"
-    
-    if vlan_id < 1 or vlan_id > 4094:
-        return False, f"Error: vlan_id debe estar entre 1 y 4094, recibido: {vlan_id}"
-    
-    # Validar rule
-    if not isinstance(params["rule"], str):
-        return False, f"Error: rule debe ser una cadena, recibido: {type(params['rule']).__name__}"
-    
-    rule_to_remove = params["rule"].strip()
-    
-    # VLANs 1 y 2 no permiten whitelist
-    if vlan_id in (1, 2):
-        return False, f"Error: VLAN {vlan_id} no permite configuración de whitelist"
-    
-    fw_cfg = _load_firewall_config()
-    
-    if str(vlan_id) not in fw_cfg.get("vlans", {}):
-        return False, f"VLAN {vlan_id} no encontrada en firewall"
-    
-    # Eliminar regla de la configuración
-    whitelist = fw_cfg["vlans"][str(vlan_id)].get("whitelist", [])
-    
-    if rule_to_remove not in whitelist:
-        return False, f"La regla '{rule_to_remove}' no existe en la whitelist"
-    
-    whitelist.remove(rule_to_remove)
-    fw_cfg["vlans"][str(vlan_id)]["whitelist"] = whitelist
-    _save_firewall_config(fw_cfg)
-    
-    # Si la whitelist está habilitada, reaplicar
-    if fw_cfg["vlans"][str(vlan_id)].get("whitelist_enabled", False):
-        success, msg = _apply_whitelist(vlan_id, whitelist)
-        if not success:
-            return False, f"Regla eliminada pero error al aplicar: {msg}"
-    
-    logger.info(f"=== FIN: remove_rule - Regla '{rule_to_remove}' eliminada ===")
-    return True, f"Regla '{rule_to_remove}' eliminada de VLAN {vlan_id}"
-
-
-# -----------------------------
 def aislar(params: Dict[str, Any] = None) -> Tuple[bool, str]:
-    """Aislar una VLAN bloqueando nuevas conexiones.
-    VLAN 1: Bloquea tráfico entrante (-d destination)
-    Otras VLANs: Bloquea tráfico saliente (-s source)
-    """
+    """Aislar una VLAN (añadir regla en FORWARD_PROTECTION)."""
     logger.info("=== INICIO: aislar ===")
     
-    # Crear directorio de logs
-    create_module_log_directory("firewall")
-    
-    # Validar parámetros
-    if not params:
-        return False, "Error: No se proporcionaron parámetros"
-    
-    if not isinstance(params, dict):
-        return False, "Error: Los parámetros deben ser un diccionario"
-    
-    if "vlan_id" not in params:
+    if not params or "vlan_id" not in params:
         return False, "Error: vlan_id requerido"
     
-    # Validar vlan_id
-    try:
-        vlan_id = int(params["vlan_id"])
-    except (ValueError, TypeError):
-        return False, f"Error: vlan_id debe ser un número entero, recibido: {params['vlan_id']}"
-    
-    if vlan_id < 1 or vlan_id > 4094:
-        return False, f"Error: vlan_id debe estar entre 1 y 4094, recibido: {vlan_id}"
+    vlan_id = params["vlan_id"]
+    from_start = params.get("from_start", False)
     
     # PROTECCIÓN: VLAN 1 no puede ser aislada manualmente
-    if vlan_id == 1:
+    if vlan_id == 1 and not from_start:
         logger.warning("Intento de aislar VLAN 1 manualmente bloqueado")
         return False, "VLAN 1 no puede ser aislada manualmente. Solo se aísla automáticamente al iniciar el firewall."
     
-    vlan_id = int(params["vlan_id"])
+    if vlan_id < 1 or vlan_id > 4094:
+        return False, f"Error: vlan_id inválido: {vlan_id}"
     
     fw_cfg = _load_firewall_config()
     
     if str(vlan_id) not in fw_cfg.get("vlans", {}):
-        return False, f"Error: VLAN {vlan_id} no está configurada en el firewall"
+        return False, f"Error: VLAN {vlan_id} no está configurada"
     
     vlan_cfg = fw_cfg["vlans"][str(vlan_id)]
     vlan_ip_network = vlan_cfg.get("ip", "")
     
     if not vlan_ip_network:
-        return False, f"Error: VLAN {vlan_id} no tiene IP de red configurada"
+        return False, f"Error: VLAN {vlan_id} no tiene IP configurada"
     
-    # Usar directamente la IP de red con máscara
-    ip_mask = vlan_ip_network
+    ip_mask = vlan_ip_network if '/' in vlan_ip_network else f"{vlan_ip_network}/24"
     
-    # VLAN 1 tiene comportamiento especial: bloquea tráfico HACIA ella (-d)
+    # Asegurar que existe FORWARD_PROTECTION
+    _ensure_forward_protection_chain()
+    
+    # VLAN 1: bloquea tráfico HACIA ella (-d)
     if vlan_id == 1:
         logger.info(f"Aislando VLAN 1 con IP {ip_mask} (bloqueando tráfico entrante -d)")
         
-        # Asegurar que existe la cadena de seguridad
-        _ensure_security_chain()
-        
-        # Verificar si ya está aislada (usando -d)
-        success, output = _run_command([
-            "iptables", "-C", "SECURITY_DROPS_FIREWALL", "-d", ip_mask, "-m", "conntrack", 
+        # Verificar si ya está aislada (regla puede estar en cualquier posición)
+        success, _ = _run_command([
+            "/usr/sbin/iptables", "-C", "FORWARD_PROTECTION", "-d", ip_mask, "-m", "conntrack", 
             "--ctstate", "NEW", "-j", "DROP"
         ])
         
         if success:
-            logger.info(f"VLAN 1 ya está aislada")
-            return True, f"VLAN 1 ya estaba aislada"
+            logger.info("VLAN 1 ya está aislada (regla existe)")
+            return True, "VLAN 1 ya estaba aislada"
         
-        # Añadir regla de aislamiento en SECURITY_DROPS_FIREWALL con -d (destination)
-        # No añadimos a INPUT directamente para evitar conflicto con INPUT_RESTRICTIONS
+        # Añadir regla en posición 1 (prioridad máxima)
         success, output = _run_command([
-            "iptables", "-I", "SECURITY_DROPS_FIREWALL", "1", "-d", ip_mask, "-m", "conntrack", 
+            "/usr/sbin/iptables", "-I", "FORWARD_PROTECTION", "1", "-d", ip_mask, "-m", "conntrack", 
             "--ctstate", "NEW", "-j", "DROP"
         ])
         
         if not success:
-            logger.error(f"Error aislando VLAN 1 en SECURITY_DROPS_FIREWALL: {output}")
+            logger.error(f"Error aislando VLAN 1: {output}")
             return False, f"Error al aislar VLAN 1: {output}"
         
-        logger.info("Regla de aislamiento VLAN 1 añadida solo en SECURITY_DROPS_FIREWALL")
-        
+        logger.info("VLAN 1 aislada con regla DROP insertada en posición 1")
         msg = "VLAN 1 aislada correctamente. Tráfico entrante bloqueado (saliente permitido)."
     
     else:
-        # VLANs normales: bloquear tráfico saliente (-s)
+        # Otras VLANs: bloquea tráfico DESDE ella (-s)
         logger.info(f"Aislando VLAN {vlan_id} con IP {ip_mask} (bloqueando tráfico saliente -s)")
         
-        # Asegurar que existe la cadena de seguridad
-        _ensure_security_chain()
-        
         # Verificar si ya está aislada
-        success, output = _run_command([
-            "iptables", "-C", "SECURITY_DROPS_FIREWALL", "-s", ip_mask, "-m", "conntrack", 
+        success, _ = _run_command([
+            "/usr/sbin/iptables", "-C", "FORWARD_PROTECTION", "-s", ip_mask, "-m", "conntrack", 
             "--ctstate", "NEW", "-j", "DROP"
         ])
         
@@ -1215,18 +813,15 @@ def aislar(params: Dict[str, Any] = None) -> Tuple[bool, str]:
             logger.info(f"VLAN {vlan_id} ya está aislada")
             return True, f"VLAN {vlan_id} ya estaba aislada"
         
-        # Añadir regla de aislamiento en SECURITY_DROPS_FIREWALL con -s (source)
-        # No añadimos a INPUT directamente para mantener separación de responsabilidades
+        # Añadir regla
         success, output = _run_command([
-            "iptables", "-I", "SECURITY_DROPS_FIREWALL", "1", "-s", ip_mask, "-m", "conntrack", 
+            "/usr/sbin/iptables", "-I", "FORWARD_PROTECTION", "1", "-s", ip_mask, "-m", "conntrack", 
             "--ctstate", "NEW", "-j", "DROP"
         ])
         
         if not success:
-            logger.error(f"Error aislando VLAN {vlan_id} en SECURITY_DROPS_FIREWALL: {output}")
+            logger.error(f"Error aislando VLAN {vlan_id}: {output}")
             return False, f"Error al aislar VLAN {vlan_id}: {output}"
-        
-        logger.info(f"Regla de aislamiento VLAN {vlan_id} añadida en SECURITY_DROPS_FIREWALL")
         
         msg = f"VLAN {vlan_id} aislada correctamente. Las conexiones nuevas están bloqueadas."
     
@@ -1237,90 +832,65 @@ def aislar(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     logger.info(f"VLAN {vlan_id} aislada exitosamente")
     logger.info("=== FIN: aislar ===")
     
-    # Registrar acción en actions.log
-    log_action("firewall", msg)
+    if not params.get("suppress_log", False):
+        log_action("firewall", msg)
     
     return True, msg
 
 
 def desaislar(params: Dict[str, Any] = None) -> Tuple[bool, str]:
-    """Desaislar una VLAN eliminando el bloqueo de nuevas conexiones.
-    Ahora también permite desaislar VLAN 1 (el usuario puede controlarlo manualmente).
-    """
+    """Desaislar una VLAN (eliminar regla de FORWARD_PROTECTION)."""
     logger.info("=== INICIO: desaislar ===")
     
-    # Validar parámetros
-    if not params:
-        return False, "Error: No se proporcionaron parámetros"
-    
-    if not isinstance(params, dict):
-        return False, "Error: Los parámetros deben ser un diccionario"
-    
-    if "vlan_id" not in params:
+    if not params or "vlan_id" not in params:
         return False, "Error: vlan_id requerido"
     
-    # Validar vlan_id
-    try:
-        vlan_id = int(params["vlan_id"])
-    except (ValueError, TypeError):
-        return False, f"Error: vlan_id debe ser un número entero, recibido: {params['vlan_id']}"
+    vlan_id = params["vlan_id"]
     
-    if vlan_id < 1 or vlan_id > 4094:
-        return False, f"Error: vlan_id debe estar entre 1 y 4094, recibido: {vlan_id}"
-    
-    # PROTECCIÓN: VLAN 1 no puede ser desaislada manualmente
+    # PROTECCIÓN: VLAN 1 no puede ser desaislada
     if vlan_id == 1:
         logger.warning("Intento de desaislar VLAN 1 bloqueado")
         return False, "VLAN 1 no puede ser desaislada. Permanece aislada mientras el firewall esté activo."
     
+    if vlan_id < 1 or vlan_id > 4094:
+        return False, f"Error: vlan_id inválido: {vlan_id}"
+    
     fw_cfg = _load_firewall_config()
     
     if str(vlan_id) not in fw_cfg.get("vlans", {}):
-        return False, f"Error: VLAN {vlan_id} no está configurada en el firewall"
+        return False, f"Error: VLAN {vlan_id} no está configurada"
     
     vlan_cfg = fw_cfg["vlans"][str(vlan_id)]
     vlan_ip_network = vlan_cfg.get("ip", "")
     
     if not vlan_ip_network:
-        return False, f"Error: VLAN {vlan_id} no tiene IP de red configurada"
+        return False, f"Error: VLAN {vlan_id} no tiene IP configurada"
     
-    # Usar directamente la IP de red con máscara
-    ip_mask = vlan_ip_network
+    ip_mask = vlan_ip_network if '/' in vlan_ip_network else f"{vlan_ip_network}/24"
     
     logger.info(f"Desaislando VLAN {vlan_id} con IP {ip_mask}")
     
     # Verificar si está aislada
-    success, output = _run_command([
-        "iptables", "-C", "SECURITY_DROPS_FIREWALL", "-s", ip_mask, "-m", "conntrack", 
+    success, _ = _run_command([
+        "/usr/sbin/iptables", "-C", "FORWARD_PROTECTION", "-s", ip_mask, "-m", "conntrack", 
         "--ctstate", "NEW", "-j", "DROP"
     ])
     
     if not success:
         logger.info(f"VLAN {vlan_id} no estaba aislada")
-        # Actualizar configuración por si acaso
         vlan_cfg["isolated"] = False
         _save_firewall_config(fw_cfg)
         return True, f"VLAN {vlan_id} no estaba aislada"
     
-    # Eliminar regla de aislamiento de SECURITY_DROPS_FIREWALL
+    # Eliminar regla
     success, output = _run_command([
-        "iptables", "-D", "SECURITY_DROPS_FIREWALL", "-s", ip_mask, "-m", "conntrack", 
+        "/usr/sbin/iptables", "-D", "FORWARD_PROTECTION", "-s", ip_mask, "-m", "conntrack", 
         "--ctstate", "NEW", "-j", "DROP"
     ])
     
     if not success:
-        logger.error(f"Error desaislando VLAN {vlan_id} en SECURITY_DROPS_FIREWALL: {output}")
+        logger.error(f"Error desaislando VLAN {vlan_id}: {output}")
         return False, f"Error al desaislar VLAN {vlan_id}: {output}"
-    
-    # Eliminar la regla de INPUT también
-    success_input, output_input = _run_command([
-        "iptables", "-D", "INPUT", "-s", ip_mask, "-m", "conntrack", 
-        "--ctstate", "NEW", "-j", "DROP"
-    ])
-    
-    if not success_input:
-        logger.warning(f"Error eliminando regla INPUT para VLAN {vlan_id}: {output_input}")
-        # Continuar aunque falle INPUT, FORWARD ya está eliminado
     
     # Actualizar configuración
     vlan_cfg["isolated"] = False
@@ -1330,25 +900,27 @@ def desaislar(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     logger.info(f"VLAN {vlan_id} desaislada exitosamente")
     logger.info("=== FIN: desaislar ===")
     
-    # Registrar acción en actions.log
-    log_action("firewall", msg)
+    if not params.get("suppress_log", False):
+        log_action("firewall", msg)
     
     return True, msg
 
 
-# -----------------------------
+# =============================================================================
+# RESTRICCIONES (INPUT_VLAN_X)
+# =============================================================================
+
 def restrict(params: Dict[str, Any] = None) -> Tuple[bool, str]:
-    """Restringir una VLAN bloqueando acceso al router (INPUT) según ID.
-    Usa cadena INPUT_RESTRICTIONS para garantizar evaluación controlada.
-    VLAN 1 y 2: DROP todo
-    Otras VLANs: permitir solo DHCP (67/68), DNS (53 TCP/UDP) e ICMP, DROPar el resto
+    """Restringir acceso al router desde una VLAN (INPUT_VLAN_X).
+    
+    VLANs 1-2: DROP total
+    Otras VLANs: Permitir DHCP, DNS, ICMP; DROP resto
     """
     logger.info("=== INICIO: restrict ===")
     
-    # Validar parámetros
     if not params or "vlan_id" not in params:
         return False, "Error: vlan_id requerido"
-
+    
     suppress_log = bool(params.get("suppress_log", False))
     
     try:
@@ -1370,11 +942,7 @@ def restrict(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     if not vlan_ip_network:
         return False, f"Error: VLAN {vlan_id} no tiene IP configurada"
     
-    # Calcular máscara si no está
-    if '/' not in vlan_ip_network:
-        ip_mask = f"{vlan_ip_network}/24"
-    else:
-        ip_mask = vlan_ip_network
+    ip_mask = vlan_ip_network if '/' in vlan_ip_network else f"{vlan_ip_network}/24"
     
     logger.info(f"Aplicando restricciones a VLAN {vlan_id} ({ip_mask})")
     
@@ -1382,83 +950,45 @@ def restrict(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     if vlan_cfg.get("restricted", False):
         return True, f"VLAN {vlan_id} ya estaba restringida"
     
-    # Asegurar que la cadena INPUT_RESTRICTIONS existe y está bien posicionada
-    _ensure_input_restriction_chain()
+    chain_name = f"INPUT_VLAN_{vlan_id}"
     
-    # Determinar restricción según VLAN
+    # Limpiar cadena
+    _run_command(["/usr/sbin/iptables", "-F", chain_name])
+    
+    # Aplicar política según VLAN
     if vlan_id in [1, 2]:
-        # VLAN 1 y 2: DROP todo desde esa VLAN
+        # DROP total
         logger.info(f"VLAN {vlan_id}: aplicando DROP total")
-        
-        # Verificar si la regla ya existe
-        check_exists = _run_command([
-            "iptables", "-C", "INPUT_RESTRICTIONS", "-s", ip_mask, "-j", "DROP"
-        ])[0]
-        
-        if check_exists:
-            logger.info(f"Regla DROP para VLAN {vlan_id} ya existe en INPUT_RESTRICTIONS")
-            msg = f"VLAN {vlan_id} restringida: bloqueado acceso total al router"
-        else:
-            success, output = _run_command([
-                "iptables", "-A", "INPUT_RESTRICTIONS", "-s", ip_mask, "-j", "DROP"
-            ])
-            
-            if not success:
-                logger.error(f"Error aplicando restricción a VLAN {vlan_id}: {output}")
-                return False, f"Error al restringir VLAN {vlan_id}: {output}"
-            
-            msg = f"VLAN {vlan_id} restringida: bloqueado acceso total al router"
-    
+        _run_command(["/usr/sbin/iptables", "-A", chain_name, "-j", "DROP"])
+        msg = f"VLAN {vlan_id} restringida: bloqueado acceso total al router"
     else:
-        # Otras VLANs: permitir DHCP, DNS e ICMP; bloquear el resto
+        # Permitir DHCP, DNS, ICMP
         logger.info(f"VLAN {vlan_id}: permitiendo DHCP, DNS e ICMP; bloqueando resto")
         
-        # DHCP (puertos 67/68 UDP) - verificar antes de añadir
-        if not _run_command(["iptables", "-C", "INPUT_RESTRICTIONS", "-s", ip_mask, "-p", "udp", "--dport", "67:68", "-j", "ACCEPT"])[0]:
-            success_dhcp = _run_command([
-                "iptables", "-A", "INPUT_RESTRICTIONS", "-s", ip_mask, "-p", "udp", "--dport", "67:68", "-j", "ACCEPT"
-            ])[0]
-            if not success_dhcp:
-                logger.warning(f"Error permitiendo DHCP para VLAN {vlan_id}")
-            else:
-                logger.info(f"Permitido DHCP desde VLAN {vlan_id}")
+        # DHCP
+        _run_command([
+            "/usr/sbin/iptables", "-A", chain_name, "-p", "udp", "--dport", "67:68", "-j", "ACCEPT"
+        ])
         
-        # DNS UDP 53 - verificar antes de añadir
-        if not _run_command(["iptables", "-C", "INPUT_RESTRICTIONS", "-s", ip_mask, "-p", "udp", "--dport", "53", "-j", "ACCEPT"])[0]:
-            _run_command([
-                "iptables", "-A", "INPUT_RESTRICTIONS", "-s", ip_mask, "-p", "udp", "--dport", "53", "-j", "ACCEPT"
-            ])
+        # DNS
+        _run_command([
+            "/usr/sbin/iptables", "-A", chain_name, "-p", "udp", "--dport", "53", "-j", "ACCEPT"
+        ])
+        _run_command([
+            "/usr/sbin/iptables", "-A", chain_name, "-p", "tcp", "--dport", "53", "-j", "ACCEPT"
+        ])
         
-        # DNS TCP 53 - verificar antes de añadir
-        if not _run_command(["iptables", "-C", "INPUT_RESTRICTIONS", "-s", ip_mask, "-p", "tcp", "--dport", "53", "-j", "ACCEPT"])[0]:
-            _run_command([
-                "iptables", "-A", "INPUT_RESTRICTIONS", "-s", ip_mask, "-p", "tcp", "--dport", "53", "-j", "ACCEPT"
-            ])
+        # ICMP
+        _run_command([
+            "/usr/sbin/iptables", "-A", chain_name, "-p", "icmp", "-j", "ACCEPT"
+        ])
         
-        # ICMP (ping) - verificar antes de añadir
-        if not _run_command(["iptables", "-C", "INPUT_RESTRICTIONS", "-s", ip_mask, "-p", "icmp", "-j", "ACCEPT"])[0]:
-            success_icmp = _run_command([
-                "iptables", "-A", "INPUT_RESTRICTIONS", "-s", ip_mask, "-p", "icmp", "-j", "ACCEPT"
-            ])[0]
-            if not success_icmp:
-                logger.warning(f"Error permitiendo ICMP para VLAN {vlan_id}")
-            else:
-                logger.info(f"Permitido ICMP desde VLAN {vlan_id}")
-        
-        # DROP todo lo demás - verificar antes de añadir
-        check_drop = _run_command(["iptables", "-C", "INPUT_RESTRICTIONS", "-s", ip_mask, "-j", "DROP"])[0]
-        if not check_drop:
-            success, output = _run_command([
-                "iptables", "-A", "INPUT_RESTRICTIONS", "-s", ip_mask, "-j", "DROP"
-            ])
-            
-            if not success:
-                logger.error(f"Error aplicando restricción a VLAN {vlan_id}: {output}")
-                return False, f"Error al restringir VLAN {vlan_id}: {output}"
+        # DROP resto
+        _run_command(["/usr/sbin/iptables", "-A", chain_name, "-j", "DROP"])
         
         msg = f"VLAN {vlan_id} restringida: solo DHCP, DNS e ICMP permitidos al router"
     
-    # Marcar como restringida en configuración
+    # Marcar como restringida
     vlan_cfg["restricted"] = True
     _save_firewall_config(fw_cfg)
     
@@ -1469,14 +999,14 @@ def restrict(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     return True, msg
 
 
-# -----------------------------
 def unrestrict(params: Dict[str, Any] = None) -> Tuple[bool, str]:
-    """Eliminar restricciones de una VLAN (INPUT) desde cadena INPUT_RESTRICTIONS."""
+    """Eliminar restricciones de una VLAN (INPUT_VLAN_X)."""
     logger.info("=== INICIO: unrestrict ===")
     
-    # Validar parámetros
     if not params or "vlan_id" not in params:
         return False, "Error: vlan_id requerido"
+    
+    suppress_log = bool(params.get("suppress_log", False))
     
     try:
         vlan_id = int(params["vlan_id"])
@@ -1492,125 +1022,284 @@ def unrestrict(params: Dict[str, Any] = None) -> Tuple[bool, str]:
         return False, f"Error: VLAN {vlan_id} no está configurada"
     
     vlan_cfg = fw_cfg["vlans"][str(vlan_id)]
-    vlan_ip_network = vlan_cfg.get("ip", "")
     
-    if not vlan_ip_network:
-        return False, f"Error: VLAN {vlan_id} no tiene IP configurada"
-    
-    # Calcular máscara si no está
-    if '/' not in vlan_ip_network:
-        ip_mask = f"{vlan_ip_network}/24"
-    else:
-        ip_mask = vlan_ip_network
-    
-    logger.info(f"Eliminando restricciones de VLAN {vlan_id} ({ip_mask})")
+    logger.info(f"Eliminando restricciones de VLAN {vlan_id}")
     
     # Verificar si estaba restringida
     if not vlan_cfg.get("restricted", False):
         logger.info(f"VLAN {vlan_id} no estaba restringida")
         return True, f"VLAN {vlan_id} no estaba restringida"
     
-    # Eliminar reglas desde INPUT_RESTRICTIONS según VLAN
-    if vlan_id in [1, 2]:
-        # Solo hay una regla DROP
-        _run_command([
-            "iptables", "-D", "INPUT_RESTRICTIONS", "-s", ip_mask, "-j", "DROP"
-        ])
-    else:
-        # Eliminar reglas: DHCP, DNS (UDP/TCP), ICMP y DROP
-        _run_command([
-            "iptables", "-D", "INPUT_RESTRICTIONS", "-s", ip_mask, "-p", "udp", "--dport", "67:68", "-j", "ACCEPT"
-        ])
-        _run_command([
-            "iptables", "-D", "INPUT_RESTRICTIONS", "-s", ip_mask, "-p", "udp", "--dport", "53", "-j", "ACCEPT"
-        ])
-        _run_command([
-            "iptables", "-D", "INPUT_RESTRICTIONS", "-s", ip_mask, "-p", "tcp", "--dport", "53", "-j", "ACCEPT"
-        ])
-        _run_command([
-            "iptables", "-D", "INPUT_RESTRICTIONS", "-s", ip_mask, "-p", "icmp", "-j", "ACCEPT"
-        ])
-        _run_command([
-            "iptables", "-D", "INPUT_RESTRICTIONS", "-s", ip_mask, "-j", "DROP"
-        ])
+    chain_name = f"INPUT_VLAN_{vlan_id}"
+    
+    # Limpiar cadena y permitir todo
+    _run_command(["/usr/sbin/iptables", "-F", chain_name])
+    _run_command(["/usr/sbin/iptables", "-A", chain_name, "-j", "ACCEPT"])
     
     # Marcar como no restringida
     vlan_cfg["restricted"] = False
     _save_firewall_config(fw_cfg)
     
-    msg = f"VLAN {vlan_id} desrestringida"
-    logger.info(f"=== FIN: unrestrict - {msg} ===")
+    msg = f"VLAN {vlan_id} desrestringida correctamente"
+    logger.info(f"=== FIN: unrestrict - VLAN {vlan_id} desrestringida ===")
+    if not suppress_log:
+        log_action("firewall", msg)
+    
+    return True, msg
+
+
+# =============================================================================
+# WHITELIST
+# =============================================================================
+
+def enable_whitelist(params: Dict[str, Any] = None) -> Tuple[bool, str]:
+    """Habilitar whitelist en una VLAN específica."""
+    logger.info("=== INICIO: enable_whitelist ===")
+    
+    if not params or "vlan_id" not in params:
+        return False, "Error: vlan_id requerido"
+    
+    try:
+        vlan_id = int(params["vlan_id"])
+    except (ValueError, TypeError):
+        return False, f"Error: vlan_id debe ser entero"
+    
+    if vlan_id < 1 or vlan_id > 4094:
+        return False, f"Error: vlan_id inválido"
+    
+    # VLANs 1 y 2 no permiten whitelist
+    if vlan_id in (1, 2):
+        return False, f"Error: VLAN {vlan_id} no permite configuración de whitelist"
+    
+    # Aceptar tanto 'ips' como 'whitelist' por compatibilidad
+    whitelist = params.get("ips", params.get("whitelist", []))
+    
+    if isinstance(whitelist, str):
+        whitelist = [whitelist] if whitelist else []
+    elif not isinstance(whitelist, list):
+        return False, f"Error: whitelist debe ser una lista"
+    
+    fw_cfg = _load_firewall_config()
+    
+    if str(vlan_id) not in fw_cfg.get("vlans", {}):
+        return False, f"VLAN {vlan_id} no encontrada en firewall. Ejecute START primero."
+    
+    # Guardar configuración
+    fw_cfg["vlans"][str(vlan_id)]["whitelist"] = whitelist
+    fw_cfg["vlans"][str(vlan_id)]["whitelist_enabled"] = True
+    _save_firewall_config(fw_cfg)
+    
+    # Aplicar whitelist
+    success, msg = _apply_whitelist(vlan_id, whitelist)
+    
+    result_msg = f"Whitelist habilitada en VLAN {vlan_id}\n{msg}"
+    logger.info(f"=== FIN: enable_whitelist - Success: {success} ===")
+    
+    if success:
+        log_action("firewall", result_msg)
+    
+    return success, result_msg
+
+
+def disable_whitelist(params: Dict[str, Any] = None) -> Tuple[bool, str]:
+    """Deshabilitar whitelist en una VLAN específica."""
+    logger.info("=== INICIO: disable_whitelist ===")
+    
+    if not params or "vlan_id" not in params:
+        return False, "Error: vlan_id requerido"
+    
+    try:
+        vlan_id = int(params["vlan_id"])
+    except (ValueError, TypeError):
+        return False, f"Error: vlan_id debe ser entero"
+    
+    fw_cfg = _load_firewall_config()
+    
+    if str(vlan_id) not in fw_cfg.get("vlans", {}):
+        return False, f"VLAN {vlan_id} no encontrada"
+    
+    # Actualizar configuración
+    fw_cfg["vlans"][str(vlan_id)]["whitelist_enabled"] = False
+    _save_firewall_config(fw_cfg)
+    
+    # FIX BUG #5: Preservar reglas DMZ ACCEPT antes de limpiar
+    # Cargar dmz.json para identificar IPs DMZ reales
+    dmz_ips = set()
+    try:
+        dmz_cfg_path = os.path.join(BASE_DIR, "config", "dmz", "dmz.json")
+        if os.path.exists(dmz_cfg_path):
+            with open(dmz_cfg_path, "r") as f:
+                dmz_cfg = json.load(f)
+                for dest in dmz_cfg.get("destinations", []):
+                    dmz_ips.add(dest.get("ip"))
+    except Exception as e:
+        logger.warning(f"No se pudo cargar dmz.json: {e}")
+    
+    # Buscar reglas ACCEPT con IPs DMZ reales en FORWARD_VLAN_X
+    chain_name = f"FORWARD_VLAN_{vlan_id}"
+    dmz_rules = []
+    success, output = _run_command(["/usr/sbin/iptables", "-L", chain_name, "-n", "--line-numbers"])
+    if success:
+        for line in output.split('\n'):
+            # Buscar reglas ACCEPT con destino específico
+            if 'ACCEPT' in line:
+                parts = line.split()
+                # Verificar que tiene suficientes campos y el destino no es 0.0.0.0/0
+                if len(parts) >= 6 and parts[5] != '0.0.0.0/0':
+                    dest_ip = parts[5]
+                    # Solo preservar si está en dmz_ips
+                    if dest_ip in dmz_ips:
+                        dmz_rules.append(dest_ip)
+                        logger.info(f"Preservando regla DMZ ACCEPT para {dest_ip}")
+    
+    # Restaurar ACCEPT por defecto en FORWARD_VLAN_X
+    _run_command(["/usr/sbin/iptables", "-F", chain_name])
+    
+    # Re-añadir reglas DMZ ACCEPT
+    for dmz_ip in dmz_rules:
+        _run_command(["/usr/sbin/iptables", "-A", chain_name, "-d", dmz_ip, "-j", "ACCEPT"])
+        logger.info(f"Regla DMZ ACCEPT restaurada para {dmz_ip}")
+    
+    # ACCEPT incondicional final
+    _run_command(["/usr/sbin/iptables", "-A", chain_name, "-j", "ACCEPT"])
+    
+    msg = f"Whitelist deshabilitada en VLAN {vlan_id}"
+    logger.info(f"=== FIN: disable_whitelist ===")
     log_action("firewall", msg)
     
     return True, msg
 
 
-# -----------------------------
-def reset_defaults(params: Dict[str, Any] = None) -> Tuple[bool, str]:
-    """Restaurar configuración de firewall a valores seguros por defecto.
-    VLAN 1: isolated=true, restricted=false
-    Otras VLANs: restricted=true
-    Aplica cambios y reinicia el firewall.
-    """
-    logger.info("=== INICIO: reset_defaults ===")
+def add_rule(params: Dict[str, Any] = None) -> Tuple[bool, str]:
+    """Añadir regla a whitelist de una VLAN."""
+    if not params or "vlan_id" not in params or "rule" not in params:
+        return False, "Error: vlan_id y rule requeridos"
+    
+    try:
+        vlan_id = int(params["vlan_id"])
+    except (ValueError, TypeError):
+        return False, f"Error: vlan_id debe ser entero"
+    
+    rule = params["rule"].strip()
     
     fw_cfg = _load_firewall_config()
-    changes = []
     
-    # Restablecer VLAN 1: aislada pero no restringida
-    if "1" in fw_cfg.get("vlans", {}):
-        vlan1_cfg = fw_cfg["vlans"]["1"]
-        vlan1_cfg["isolated"] = True
-        vlan1_cfg["restricted"] = False
-        changes.append("VLAN 1: isolated=true, restricted=false")
-        logger.info("VLAN 1 configurada: aislada")
+    if str(vlan_id) not in fw_cfg.get("vlans", {}):
+        return False, f"VLAN {vlan_id} no encontrada"
     
-    # Restablecer otras VLANs: restringidas
-    for vlan_id, vlan_cfg in fw_cfg.get("vlans", {}).items():
-        if vlan_id != "1":
-            vlan_cfg["restricted"] = True
-            changes.append(f"VLAN {vlan_id}: restricted=true")
-            logger.info(f"VLAN {vlan_id} configurada: restringida")
+    vlan_cfg = fw_cfg["vlans"][str(vlan_id)]
     
-    # Guardar configuración
+    if "whitelist" not in vlan_cfg:
+        vlan_cfg["whitelist"] = []
+    
+    if rule in vlan_cfg["whitelist"]:
+        return False, f"La regla ya existe en la whitelist"
+    
+    vlan_cfg["whitelist"].append(rule)
     _save_firewall_config(fw_cfg)
     
-    # Reiniciar firewall para aplicar cambios
-    logger.info("Reiniciando firewall para aplicar defaults...")
-    stop_success, stop_msg = stop()
-    if not stop_success:
-        logger.warning(f"Advertencia al detener firewall: {stop_msg}")
+    # Reaplicar whitelist si está habilitada
+    if vlan_cfg.get("whitelist_enabled", False):
+        _apply_whitelist(vlan_id, vlan_cfg["whitelist"])
     
-    start_success, start_msg = start()
-    if not start_success:
-        msg = f"Error reiniciando firewall en reset_defaults: {start_msg}"
-        logger.error(msg)
-        return False, msg
+    msg = f"Regla añadida a VLAN {vlan_id}: {rule}"
+    log_action("firewall", msg)
     
-    result_msg = "Firewall restaurado a valores por defecto:\n" + "\n".join(changes) + "\n\nFirewall reiniciado"
-    logger.info(f"=== FIN: reset_defaults - {result_msg} ===")
-    log_action("firewall", result_msg)
-    
-    return True, result_msg
+    return True, msg
 
 
-# -----------------------------
-# Exportar acciones permitidas
-# -----------------------------
+def remove_rule(params: Dict[str, Any] = None) -> Tuple[bool, str]:
+    """Eliminar regla de whitelist de una VLAN."""
+    if not params or "vlan_id" not in params or "rule" not in params:
+        return False, "Error: vlan_id y rule requeridos"
+    
+    try:
+        vlan_id = int(params["vlan_id"])
+    except (ValueError, TypeError):
+        return False, f"Error: vlan_id debe ser entero"
+    
+    rule = params["rule"].strip()
+    
+    fw_cfg = _load_firewall_config()
+    
+    if str(vlan_id) not in fw_cfg.get("vlans", {}):
+        return False, f"VLAN {vlan_id} no encontrada"
+    
+    vlan_cfg = fw_cfg["vlans"][str(vlan_id)]
+    
+    if "whitelist" not in vlan_cfg or rule not in vlan_cfg["whitelist"]:
+        return False, f"La regla no existe en la whitelist"
+    
+    vlan_cfg["whitelist"].remove(rule)
+    _save_firewall_config(fw_cfg)
+    
+    # Reaplicar whitelist si está habilitada
+    if vlan_cfg.get("whitelist_enabled", False):
+        _apply_whitelist(vlan_id, vlan_cfg["whitelist"])
+    
+    msg = f"Regla eliminada de VLAN {vlan_id}: {rule}"
+    log_action("firewall", msg)
+    
+    return True, msg
+
+
+def config(params: Dict[str, Any] = None) -> Tuple[bool, str]:
+    """Configurar firewall (placeholder para la interfaz web)."""
+    logger.info("Config llamado desde interfaz web")
+    return True, "Use la interfaz web para configurar el firewall"
+
+
+def reset_defaults(params: Dict[str, Any] = None) -> Tuple[bool, str]:
+    """Restaurar firewall a valores por defecto y reiniciar."""
+    logger.info("=== INICIO: reset_defaults ===")
+    
+    # FIX BUG #8: Detener DMZ primero para evitar inconsistencias
+    try:
+        from . import dmz
+        dmz_success, dmz_msg = dmz.stop(params)
+        if dmz_success:
+            logger.info(f"DMZ detenido durante reset: {dmz_msg}")
+        else:
+            logger.warning(f"Error deteniendo DMZ durante reset: {dmz_msg}")
+    except Exception as e:
+        logger.warning(f"No se pudo detener DMZ durante reset: {e}")
+    
+    # Detener firewall
+    stop(params)
+    
+    # Limpiar configuración
+    fw_cfg = _load_firewall_config()
+    for vlan_id in fw_cfg.get("vlans", {}).keys():
+        fw_cfg["vlans"][vlan_id]["isolated"] = False
+        fw_cfg["vlans"][vlan_id]["restricted"] = False
+        fw_cfg["vlans"][vlan_id]["whitelist_enabled"] = False
+        fw_cfg["vlans"][vlan_id]["whitelist"] = []
+    
+    _save_firewall_config(fw_cfg)
+    
+    # Reiniciar con políticas predeterminadas
+    success, msg = start(params)
+    
+    logger.info("=== FIN: reset_defaults ===")
+    return success, f"Firewall restaurado a valores por defecto\n{msg}"
+
+
+# =============================================================================
+# WHITELIST DE ACCIONES PERMITIDAS
+# =============================================================================
 
 ALLOWED_ACTIONS = {
     "start": start,
     "stop": stop,
     "restart": restart,
     "status": status,
-    "config": config,
-    "enable_whitelist": enable_whitelist,
-    "disable_whitelist": disable_whitelist,
-    "add_rule": add_rule,
-    "remove_rule": remove_rule,
     "aislar": aislar,
     "desaislar": desaislar,
     "restrict": restrict,
     "unrestrict": unrestrict,
+    "enable_whitelist": enable_whitelist,
+    "disable_whitelist": disable_whitelist,
+    "add_rule": add_rule,
+    "remove_rule": remove_rule,
     "reset_defaults": reset_defaults,
 }

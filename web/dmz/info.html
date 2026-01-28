@@ -68,15 +68,17 @@
         
         <div class="section">
             <h3>📋 Descripción General</h3>
-            <p>El módulo DMZ (DeMilitarized Zone) permite exponer servicios internos de la red hacia Internet de forma controlada, redirigiendo el tráfico entrante desde la interfaz WAN hacia direcciones IP específicas en la VLAN 2 (DMZ).</p>
+            <p>El módulo DMZ (DeMilitarized Zone) permite exponer servicios internos de la red hacia Internet de forma controlada. Utiliza <strong>arquitectura jerárquica con cadenas por VLAN</strong> para aplicar reglas DNAT organizadas y compatibles con el firewall.</p>
+            <p><strong>Arquitectura V2.0:</strong> PREROUTING_VLAN_X (reglas DNAT) + FORWARD_VLAN_X (reglas ACCEPT con prioridad)</p>
         </div>
 
         <div class="section">
             <h3>⚙️ Requisitos Previos</h3>
             <ul>
                 <li><strong>⚠️ WAN debe estar configurada</strong> - La DMZ requiere que la interfaz WAN esté configurada antes de iniciarse</li>
-                <li>Las VLANs deben estar activas</li>
-                <li>Los destinos deben estar en la VLAN 2 (DMZ)</li>
+                <li><strong>⚠️ FIREWALL debe estar activo</strong> - Las cadenas FORWARD_VLAN_X son necesarias para las reglas ACCEPT</li>
+                <li><strong>⚠️ VLANs deben estar activas</strong> - Para vincular cadenas PREROUTING_VLAN_X</li>
+                <li>Los destinos pueden estar en cualquier VLAN válida (no solo VLAN 2)</li>
                 <li>Verificar con: <code>iptables -t nat -L -n</code></li>
             </ul>
         </div>
@@ -84,45 +86,54 @@
         <div class="section">
             <h3>🎯 Funciones Principales</h3>
             
-            <p><strong>CONFIG:</strong> Añadir nuevos destinos DMZ</p>
+            <p><strong>ADD_DESTINATION:</strong> Añadir nuevo destino DMZ</p>
             <ul>
-                <li>Define IP/MASK de destino</li>
-                <li>Especifica puerto a redirigir</li>
-                <li>Selecciona protocolo (TCP/UDP)</li>
+                <li>Valida IP (debe ser privada y pertenecer a una VLAN configurada)</li>
+                <li>Valida puerto (1-65535) y protocolo (tcp/udp)</li>
+                <li>Verifica duplicados</li>
                 <li>Guarda configuración en <code>config/dmz/dmz.json</code></li>
+                <li><strong>Si DMZ está activo, aplica regla inmediatamente (restart automático)</strong></li>
             </ul>
 
-            <p><strong>START:</strong> Activar todas las reglas DNAT configuradas</p>
+            <p><strong>START:</strong> Activar todas las reglas DMZ</p>
             <ul>
-                <li>Verifica que VLANs estén activas</li>
-                <li>Lee interfaz WAN de configuración</li>
-                <li>Aplica reglas: <code>iptables -t nat -A PREROUTING -i &lt;wan&gt; -p &lt;proto&gt; --dport &lt;port&gt; -j DNAT --to-destination &lt;ip&gt;</code></li>
+                <li>Verifica dependencias (WAN, FIREWALL, VLANs)</li>
+                <li>Crea cadenas PREROUTING_VLAN_X y las vincula a PREROUTING (nat table)</li>
+                <li>Aplica reglas DNAT: <code>-i &lt;wan&gt; -p &lt;proto&gt; --dport &lt;port&gt; -j DNAT --to-destination &lt;ip&gt;</code></li>
+                <li><strong>Inserta regla ACCEPT en FORWARD_VLAN_X en posición 1</strong> (antes de whitelist/DROP)</li>
+                <li>⚠️ <strong>Advertencia si IP no está en whitelist</strong> (DMZ tiene prioridad por diseño)</li>
                 <li>Actualiza estado a activo</li>
             </ul>
 
-            <p><strong>STOP:</strong> Desactivar todas las reglas y aislamientos</p>
+            <p><strong>STOP:</strong> Desactivar todas las reglas DMZ</p>
             <ul>
-                <li>Elimina reglas DNAT de cada destino</li>
-                <li>Desaisla automáticamente todos los destinos</li>
+                <li>Elimina reglas ACCEPT de cada FORWARD_VLAN_X</li>
+                <li>Desvincular y eliminar cadenas PREROUTING_VLAN_X</li>
                 <li>Actualiza estado a inactivo</li>
             </ul>
-        </div>
 
-        <div class="section">
-            <h3>🔒 Gestión de Aislamiento</h3>
-            <p>El aislamiento permite bloquear temporalmente el tráfico hacia un destino DMZ sin eliminar la configuración.</p>
-            
-            <p><strong>AISLAR:</strong></p>
+            <p><strong>REMOVE_DESTINATION:</strong> Eliminar destino DMZ específico</p>
             <ul>
-                <li>Bloquea tráfico hacia la IP con: <code>iptables -I FORWARD 1 -d &lt;ip&gt; -m conntrack --ctstate NEW -j DROP</code></li>
-                <li>Mantiene la regla DNAT activa</li>
-                <li>Útil para mantenimiento o respuesta a incidentes</li>
+                <li>Busca y elimina destino de configuración</li>
+                <li><strong>Si DMZ está activo, reaplicar reglas (restart automático)</strong></li>
             </ul>
 
-            <p><strong>DESAISLAR:</strong></p>
+            <p><strong>ISOLATE_DMZ_HOST:</strong> Aislar host DMZ individual (NUEVO)</p>
             <ul>
-                <li>Elimina la regla de bloqueo</li>
-                <li>Restaura el tráfico hacia el destino</li>
+                <li>Bloquea COMPLETAMENTE el tráfico del host DMZ</li>
+                <li><strong>PREROUTING (NAT):</strong> Inserta RETURN en posición 1 de PREROUTING_PROTECTION (impide DNAT, bloquea port forwarding)</li>
+                <li><strong>INPUT (FILTER):</strong> Inserta DROP en posición 1 de INPUT (bloquea tráfico desde el host hacia el router)</li>
+                <li>Prevalece sobre whitelist, DMZ, y cualquier otra regla (ocurre ANTES de DNAT)</li>
+                <li>Marca el host como <code>isolated: true</code> en dmz.json</li>
+                <li>Útil para respuesta rápida ante incidentes de seguridad</li>
+            </ul>
+
+            <p><strong>UNISOLATE_DMZ_HOST:</strong> Desaislar host DMZ individual (NUEVO)</p>
+            <ul>
+                <li>Elimina la regla RETURN de PREROUTING_PROTECTION (NAT)</li>
+                <li>Elimina la regla DROP de INPUT (FILTER)</li>
+                <li>Restaura el tráfico según las reglas configuradas (DNAT, DMZ, whitelist, etc.)</li>
+                <li>Marca el host como <code>isolated: false</code> en dmz.json</li>
             </ul>
         </div>
 
@@ -133,42 +144,104 @@
                 <li><strong>IP:</strong> Dirección de destino interna</li>
                 <li><strong>Puerto:</strong> Puerto redirigido</li>
                 <li><strong>Protocolo:</strong> TCP o UDP</li>
-                <li><strong>Estado:</strong> ACTIVO o AISLADO</li>
-                <li><strong>Acciones:</strong> Botones para AISLAR/DESAISLAR y ELIMINAR</li>
+                <li><strong>Estado:</strong> 
+                    <ul>
+                        <li>🔒 <strong>AISLADO:</strong> Host bloqueado (RETURN en PREROUTING_PROTECTION, NAT pos. 1 - impide DNAT)</li>
+                        <li>✅ <strong>ACTIVO:</strong> DMZ funcionando normalmente</li>
+                        <li>⏸️ <strong>CONFIGURADO:</strong> Destino guardado pero DMZ inactivo</li>
+                    </ul>
+                </li>
+                <li><strong>Acciones:</strong> 
+                    <ul>
+                        <li>🔒 <strong>AISLAR:</strong> Bloquear host inmediatamente (máxima prioridad)</li>
+                        <li>🔓 <strong>DESAISLAR:</strong> Restaurar acceso del host</li>
+                        <li>🗑️ <strong>ELIMINAR:</strong> Remover destino de la configuración</li>
+                    </ul>
+                </li>
             </ul>
+        </div>
+
+        <div class="section">
+            <h3>🎯 Orden de Prioridad de Reglas</h3>
+            <p>El sistema evalúa las reglas en el siguiente orden (mayor a menor prioridad):</p>
+            <ol>
+                <li><strong>1️⃣ PREROUTING_PROTECTION pos. 1 (NAT):</strong> RETURN host DMZ aislado (ISOLATE_DMZ_HOST)</li>
+                <li><strong>2️⃣ PREROUTING_VLAN_X (NAT):</strong> DNAT (port forwarding) para destinos DMZ activos</li>
+                <li><strong>3️⃣ FORWARD_PROTECTION (FILTER):</strong> DROP VLAN aislada (firewall aislar)</li>
+                <li><strong>4️⃣ FORWARD_VLAN_X pos. 1 (FILTER):</strong> ACCEPT destinos DMZ activos</li>
+                <li><strong>5️⃣ FORWARD_VLAN_X (FILTER):</strong> ACCEPT whitelist (si está activa)</li>
+                <li><strong>6️⃣ FORWARD_VLAN_X final (FILTER):</strong> DROP por defecto (si whitelist activa)</li>
+            </ol>
+            <p><strong>Ejemplo práctico:</strong> Si un host DMZ está aislado, el DNAT no se aplica (RETURN en PREROUTING_PROTECTION), por lo que el puerto forwarding se bloquea ANTES del routing. El tráfico nunca llega al host, incluso si está en la whitelist o tiene reglas DMZ configuradas.</p>
+            <p><strong>Tabla NAT vs Tabla FILTER:</strong> El aislamiento DMZ ocurre en PREROUTING (NAT) antes que el forwarding (FILTER), garantizando bloqueo total.</p>
         </div>
 
         <div class="warning">
             <h3>⚠️ Consideraciones de Seguridad</h3>
             <ul>
                 <li>Exponer servicios a Internet conlleva riesgos de seguridad</li>
-                <li>Usa solo la VLAN 2 (DMZ) para servicios públicos</li>
+                <li><strong>DMZ funciona con cualquier VLAN</strong>, pero se recomienda VLAN dedicada para servicios públicos</li>
+                <li><strong>DMZ tiene prioridad sobre whitelist:</strong> las reglas ACCEPT se insertan en posición 1 de FORWARD_VLAN_X</li>
+                <li><strong>Aislamiento DMZ tiene MÁXIMA prioridad:</strong> prevalece sobre todo usando PREROUTING_PROTECTION (NAT, pos. 1) que bloquea ANTES de DNAT</li>
+                <li>Si la VLAN tiene whitelist activa y la IP DMZ no está en ella, se mostrará advertencia pero funcionará</li>
+                <li><strong>Usa AISLAR para respuesta rápida:</strong> bloquea DNAT de un host comprometido inmediatamente (impide port forwarding)</li>
                 <li>Mantén los servicios actualizados y parcheados</li>
                 <li>Implementa firewall en los propios servidores DMZ</li>
-                <li>Monitoriza logs regularmente</li>
+                <li>Monitoriza logs regularmente en <code>logs/dmz/actions.log</code></li>
             </ul>
         </div>
 
         <div class="success">
             <h3>✅ Ejemplo Práctico</h3>
-            <p><strong>Escenario:</strong> Exponer servidor web en 192.168.2.10</p>
+            <p><strong>Escenario:</strong> Exponer servidor web en 10.0.5.100</p>
             <ol>
-                <li>Ir a CONFIG y añadir: IP=<code>192.168.2.10</code>, Puerto=<code>80</code>, Protocolo=<code>TCP</code></li>
+                <li>Asegurarse de que FIREWALL esté activo (START firewall)</li>
+                <li>Ir a CONFIG y añadir: IP=<code>10.0.5.100</code>, Puerto=<code>80</code>, Protocolo=<code>TCP</code></li>
                 <li>Ir a STATUS y hacer clic en START DMZ</li>
+                <li>El sistema creará:
+                    <ul>
+                        <li>Cadena PREROUTING_VLAN_5 con regla DNAT</li>
+                        <li>Regla ACCEPT en FORWARD_VLAN_5 (posición 1)</li>
+                    </ul>
+                </li>
                 <li>El tráfico HTTP entrante será redirigido automáticamente</li>
-                <li>Para mantenimiento temporal, usar botón AISLAR</li>
-                <li>Para eliminar permanentemente, usar botón ELIMINAR</li>
+                <li>Añadir más destinos con ADD_DESTINATION (restart automático)</li>
             </ol>
         </div>
 
         <div class="section">
             <h3>🔧 Resolución de Problemas</h3>
             <ul>
-                <li><strong>START no funciona:</strong> Verificar que VLANs estén activas</li>
+                <li><strong>START no funciona:</strong> Verificar que FIREWALL esté activo primero</li>
+                <li><strong>Error "FIREWALL debe estar activo":</strong> Ejecutar START en el módulo firewall</li>
                 <li><strong>No llega tráfico:</strong> Comprobar que WAN esté configurada correctamente</li>
                 <li><strong>Puerto no responde:</strong> Verificar que el servicio interno esté escuchando</li>
-                <li><strong>Conflictos:</strong> Asegurarse de no duplicar puertos para diferentes IPs</li>
+                <li><strong>Conflictos con whitelist:</strong> La advertencia es informativa, DMZ funciona correctamente</li>
+                <li><strong>Verificar reglas:</strong> <code>sudo iptables -t nat -L PREROUTING_VLAN_X -n -v</code></li>
+                <li><strong>Verificar ACCEPT:</strong> <code>sudo iptables -L FORWARD_VLAN_X -n --line-numbers</code></li>
             </ul>
+        </div>
+
+        <div class="section">
+            <h3>🔄 Versión</h3>
+            <p>DMZ Module v2.0 - Arquitectura Jerárquica Compatible con Firewall</p>
+            <p><strong>Nuevo en v2.0 (Refactorización Completa):</strong></p>
+            <ul>
+                <li>🏗️ <strong>Arquitectura jerárquica:</strong> PREROUTING_VLAN_X + integración con FORWARD_VLAN_X</li>
+                <li>🎯 <strong>Reglas ACCEPT en posición 1:</strong> DMZ tiene prioridad sobre whitelist</li>
+                <li>� <strong>Aislamiento individual:</strong> ISOLATE_DMZ_HOST/UNISOLATE_DMZ_HOST (máxima prioridad)</li>
+                <li>🔧 <strong>Validación estricta:</strong> IP privada, puerto válido, VLAN existente, range checking</li>
+                <li>🔄 <strong>Restart automático:</strong> Al añadir/eliminar destinos con DMZ activo</li>
+                <li>⚠️ <strong>Advertencias informativas:</strong> Si IP DMZ no está en whitelist de su VLAN</li>
+                <li>📝 <strong>Logs detallados:</strong> Todas las operaciones registradas en logs/dmz/actions.log</li>
+                <li>✅ <strong>Preservación de reglas:</strong> DMZ ACCEPT se preserva al modificar whitelist (Bug #9/#10 corregido)</li>
+                <li>🛡️ <strong>Sin duplicación:</strong> Verificación con -C antes de insertar reglas</li>
+            </ul>
+            <p><strong>Versiones anteriores:</strong></p>
+            <ul>
+                <li>v1.x: Arquitectura legacy con cadena SECURITY_DROPS_DMZ y aislamiento manual</li>
+            </ul>
+            <p>Última actualización: Enero 2026</p>
         </div>
     </div>
 </body>

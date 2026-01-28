@@ -237,29 +237,40 @@
 
         async function loadStatus() {
             try {
-                const response = await fetch('/admin/dmz', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify({ action: 'status', params: {} })
+                // Cargar configuración DMZ directamente desde el archivo JSON
+                const dmzResponse = await fetch('/admin/config/dmz/dmz.json', {
+                    credentials: 'include'
                 });
                 
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.detail || 'Error desconocido');
-                
-                // Validar que data.message existe y no está vacío
-                if (!data.message || data.message.trim() === '') {
-                    throw new Error('El servidor devolvió una respuesta vacía');
+                if (!dmzResponse.ok) {
+                    throw new Error('No se pudo cargar la configuración DMZ');
                 }
                 
-                try {
-                    currentStatus = JSON.parse(data.message);
-                    renderStatus();
-                } catch (parseError) {
-                    console.error('Error parseando JSON:', parseError);
-                    console.error('Respuesta recibida:', data.message);
-                    throw new Error('Error al procesar la respuesta del servidor. La configuración puede estar corrupta.');
-                }
+                const dmzConfig = await dmzResponse.json();
+                
+                // Cargar configuración WAN para obtener la interfaz
+                const wanResponse = await fetch('/admin/config/wan/wan.json', {
+                    credentials: 'include'
+                });
+                
+                const wanConfig = wanResponse.ok ? await wanResponse.json() : null;
+                
+                // Cargar configuración VLANs para verificar si están activas
+                const vlansResponse = await fetch('/admin/config/vlans/vlans.json', {
+                    credentials: 'include'
+                });
+                
+                const vlansConfig = vlansResponse.ok ? await vlansResponse.json() : null;
+                
+                // Construir objeto de estado
+                currentStatus = {
+                    status: dmzConfig.status || 0,
+                    destinations: dmzConfig.destinations || [],
+                    wan_interface: wanConfig ? (wanConfig.interface || 'N/A') : 'N/A',
+                    vlans_active: vlansConfig ? (vlansConfig.status === 1) : false
+                };
+                
+                renderStatus();
             } catch (err) {
                 console.error('Error en loadStatus:', err);
                 showResult(`❌ Error cargando estado: ${err.message}`, false);
@@ -328,16 +339,17 @@
                 // Determinar el badge de estado correcto
                 let statusBadge;
                 if (isolated) {
-                    statusBadge = '<span class="isolated-badge">🚫 AISLADO</span>';
+                    statusBadge = '<span class="isolated-badge">🔒 AISLADO</span>';
                 } else if (dmzActive) {
                     statusBadge = '<span class="normal-badge">✅ ACTIVO</span>';
                 } else {
                     statusBadge = '<span class="status-badge status-inactive">⏸️ CONFIGURADO</span>';
                 }
                 
+                // Botones de aislamiento/desaislamiento
                 const isolateBtn = isolated
-                    ? `<button class="action-btn btn-unisolate" onclick="toggleIsolation('${dest.ip}', ${dest.port}, '${dest.protocol}', false)">🔓 DESAISLAR</button>`
-                    : `<button class="action-btn btn-isolate" onclick="toggleIsolation('${dest.ip}', ${dest.port}, '${dest.protocol}', true)">🔒 AISLAR</button>`;
+                    ? `<button class="action-btn btn-unisolate" onclick="toggleIsolation('${dest.ip}', false)">🔓 DESAISLAR</button>`
+                    : `<button class="action-btn btn-isolate" onclick="toggleIsolation('${dest.ip}', true)">🔒 AISLAR</button>`;
                 
                 tableHTML += `
                     <tr>
@@ -385,19 +397,31 @@
             }
         }
 
-        async function toggleIsolation(ip, port, protocol, shouldIsolate) {
-            const action = shouldIsolate ? 'aislar' : 'desaislar';
-            const confirmMsg = shouldIsolate 
-                ? `¿Aislar destino ${ip}:${port}/${protocol}? Esto bloqueará el tráfico hacia esta IP.`
-                : `¿Desaislar destino ${ip}:${port}/${protocol}? Esto restaurará el tráfico.`;
+        // Función para aislar/desaislar host DMZ individual
+        async function toggleIsolation(ip, shouldIsolate) {
+            const action = shouldIsolate ? 'isolate_dmz_host' : 'unisolate_dmz_host';
+            const actionText = shouldIsolate ? 'aislar' : 'desaislar';
             
-            if (!confirm(confirmMsg)) return;
-            await executeAction(action, { ip, port, protocol });
+            const confirmed = confirm(
+                `¿Estás seguro de ${actionText} el host DMZ ${ip}?\n\n` +
+                (shouldIsolate 
+                    ? '⚠️ El host quedará completamente bloqueado:\n' +
+                      '   • RETURN en PREROUTING_PROTECTION (NAT - bloquea DNAT)\n' +
+                      '   • El port forwarding NO se aplicará (impide acceso desde WAN)\n' +
+                      '   • DROP en INPUT (filter - bloquea tráfico desde host al router)\n' +
+                      'Esta acción tiene PRIORIDAD MÁXIMA: ocurre ANTES de DNAT.'
+                    : 'ℹ️ Se eliminarán los bloqueos de PREROUTING_PROTECTION e INPUT.\n' +
+                      'El host volverá a estar accesible y el port forwarding funcionará.')
+            );
+            
+            if (!confirmed) return;
+            
+            await executeAction(action, { ip });
         }
 
         async function deleteDestination(ip, port, protocol) {
             if (!confirm(`¿Eliminar destino ${ip}:${port}/${protocol}? Esta acción no se puede deshacer.`)) return;
-            await executeAction('eliminar', { ip, port, protocol });
+            await executeAction('remove_destination', { ip, port, protocol });
         }
 
         document.getElementById('btnRefresh').addEventListener('click', () => { loadStatus(); });

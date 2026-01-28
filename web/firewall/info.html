@@ -68,7 +68,8 @@
         
         <div class="section">
             <h3>📋 Descripción General</h3>
-            <p>El módulo Firewall permite gestionar reglas de iptables organizadas por VLANs. Crea cadenas personalizadas para cada VLAN configurada en el sistema.</p>
+            <p>El módulo Firewall permite gestionar reglas de iptables con una <strong>arquitectura jerárquica por VLANs</strong>. Utiliza cadenas de protección globales y cadenas específicas por VLAN para un control granular del tráfico.</p>
+            <p><strong>Arquitectura V2.0:</strong> INPUT_PROTECTION (pos 1) + INPUT_VLAN_X (pos 2+) | FORWARD_PROTECTION (pos 1) + FORWARD_VLAN_X (pos 2+)</p>
         </div>
 
         <div class="section">
@@ -84,11 +85,13 @@
         <div class="section">
             <h3>🎯 Funciones Principales</h3>
             
-            <p><strong>START:</strong> Inicia el firewall creando cadenas personalizadas para cada VLAN</p>
+            <p><strong>START:</strong> Inicia el firewall con arquitectura jerárquica</p>
             <ul>
-                <li>Crea cadena <code>VLAN_X</code> para cada VLAN configurada</li>
-                <li><strong>Vincula la cadena a FORWARD:</strong> el tráfico desde la IP de cada VLAN pasa por su cadena</li>
-                <li>Por defecto, todas las reglas están en ACCEPT (sin restricción)</li>
+                <li>Crea cadenas de protección: <code>INPUT_PROTECTION</code> (pos 1), <code>FORWARD_PROTECTION</code> (pos 1)</li>
+                <li>Crea cadena <code>INPUT_VLAN_X</code> para restricciones al router (vinculada en pos 2+)</li>
+                <li>Crea cadena <code>FORWARD_VLAN_X</code> para whitelist (vinculada en pos 2+)</li>
+                <li><strong>Políticas por defecto:</strong> VLAN 1 aislada automáticamente, resto restringidas (DHCP+DNS+ICMP permitidos)</li>
+                <li>Por defecto, FORWARD_VLAN_X en ACCEPT (sin whitelist)</li>
                 <li>Guarda configuración en <code>config/firewall/firewall.json</code></li>
             </ul>
 
@@ -146,33 +149,35 @@
         <div class="section">
             <h3>🔒 Funciones de Aislamiento y Restricción</h3>
             
-            <p><strong>AISLAR:</strong> Bloquea tráfico entre VLANs (FORWARD)</p>
+            <p><strong>AISLAR:</strong> Bloquea nuevas conexiones entre VLANs (FORWARD_PROTECTION)</p>
             <ul>
                 <li>Parámetros: <code>vlan_id</code></li>
-                <li>Inserta reglas DROP en <code>SECURITY_DROPS_FIREWALL</code></li>
-                <li>VLAN 1: Bloquea tráfico entrante (-d)</li>
-                <li>Otras: Bloquea tráfico saliente (-s)</li>
-                <li>Independiente de whitelist y restricciones</li>
+                <li>Inserta reglas DROP con <code>-m conntrack --ctstate NEW</code> en <code>FORWARD_PROTECTION</code></li>
+                <li>VLAN 1: Bloquea tráfico entrante <code>-d VLAN_IP</code> (protege VLAN 1)</li>
+                <li>Otras: Bloquea tráfico saliente <code>-s VLAN_IP</code> (aísla VLAN)</li>
+                <li><strong>Conexiones establecidas continúan funcionando</strong> (solo bloquea nuevas)</li>
+                <li>Independiente de whitelist y restricciones INPUT</li>
             </ul>
 
-            <p><strong>DESAISLAR:</strong> Elimina el bloqueo entre VLANs</p>
+            <p><strong>DESAISLAR:</strong> Elimina el bloqueo de nuevas conexiones</p>
             <ul>
                 <li>Parámetros: <code>vlan_id</code></li>
-                <li>Elimina reglas de <code>SECURITY_DROPS_FIREWALL</code></li>
+                <li>Elimina reglas conntrack de <code>FORWARD_PROTECTION</code></li>
             </ul>
 
-            <p><strong>RESTRICT:</strong> Bloquea acceso al router (INPUT) desde una VLAN</p>
+            <p><strong>RESTRICT:</strong> Bloquea acceso al router (INPUT_VLAN_X)</p>
             <ul>
                 <li>Parámetros: <code>vlan_id</code></li>
-                <li><strong>VLAN 1 y 2:</strong> DROP total de tráfico desde la VLAN</li>
-                <li><strong>Otras VLANs:</strong> Permite DHCP (67/68) e ICMP (ping), bloquea lo demás</li>
-                <li>Diferente del aislamiento: restringe acceso al router, no entre VLANs</li>
+                <li><strong>VLAN 1 y 2:</strong> DROP total en INPUT_VLAN_X</li>
+                <li><strong>Otras VLANs:</strong> Permite DHCP (67-68), DNS (53) e ICMP; DROP resto</li>
+                <li>Se aplica automáticamente al hacer START (política predeterminada)</li>
+                <li>Diferente del aislamiento: afecta INPUT (router), no FORWARD (VLANs)</li>
             </ul>
 
-            <p><strong>UNRESTRICT:</strong> Elimina las restricciones de una VLAN</p>
+            <p><strong>UNRESTRICT:</strong> Elimina restricciones INPUT de una VLAN</p>
             <ul>
                 <li>Parámetros: <code>vlan_id</code></li>
-                <li>Elimina todas las reglas INPUT de restricción</li>
+                <li>Limpia INPUT_VLAN_X dejándola sin reglas (permitiendo todo)</li>
             </ul>
         </div>
 
@@ -236,18 +241,21 @@
 
         <div class="section">
             <h3>🔄 Versión</h3>
-            <p>Firewall Module v2.2 - Con soporte de Whitelist</p>
-            <p><strong>Nuevo en v2.2:</strong></p>
+            <p>Firewall Module v2.0 - Arquitectura Jerárquica con Cadenas de Protección</p>
+            <p><strong>Nuevo en v2.0 (Refactorización Completa):</strong></p>
             <ul>
-                <li>🔐 Soporte completo de whitelist por VLAN</li>
-                <li>✅ Funciones: enable_whitelist, disable_whitelist, add_rule, remove_rule</li>
-                <li>✅ Formato flexible: IP o IP:puerto</li>
-                <li>✅ Aplicación automática al hacer START</li>
+                <li>🏗️ <strong>Arquitectura jerárquica:</strong> Cadenas de protección (pos 1) + cadenas por VLAN (pos 2+)</li>
+                <li>🔐 <strong>INPUT_PROTECTION:</strong> Protección del router desde WAN (solo ICMP permitido)</li>
+                <li>🔐 <strong>FORWARD_PROTECTION:</strong> Aislamiento de VLANs con conntrack (solo nuevas conexiones)</li>
+                <li>🎯 <strong>INPUT_VLAN_X:</strong> Restricciones individuales al router por VLAN</li>
+                <li>🎯 <strong>FORWARD_VLAN_X:</strong> Whitelist individual por VLAN</li>
+                <li>🔧 <strong>Políticas predeterminadas:</strong> VLAN 1 aislada, resto restringidas (DHCP+DNS+ICMP)</li>
+                <li>✅ <strong>DMZ integrado:</strong> Reglas ACCEPT en FORWARD_VLAN_X preservadas al modificar whitelist</li>
+                <li>🛡️ <strong>Protección de posición:</strong> Auto-corrección si cadenas de protección cambian de posición</li>
             </ul>
             <p><strong>Versiones anteriores:</strong></p>
             <ul>
-                <li>v2.1: Vinculación automática a FORWARD</li>
-                <li>v2.0: Versión base simplificada</li>
+                <li>v1.x: Arquitectura legacy con SECURITY_DROPS_FIREWALL</li>
             </ul>
             <p>Última actualización: Enero 2026</p>
         </div>

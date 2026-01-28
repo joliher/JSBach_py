@@ -278,6 +278,30 @@
                 return;
             }
             
+            // Verificar si el puerto y protocolo ya están en uso
+            try {
+                const dmzResponse = await fetch('/admin/config/dmz/dmz.json');
+                if (dmzResponse.ok) {
+                    const dmzData = await dmzResponse.json();
+                    const destinations = dmzData.destinations || [];
+                    
+                    // Buscar si el puerto+protocolo ya están en uso
+                    const portInUse = destinations.find(dest => 
+                        dest.port === port && 
+                        dest.protocol === protocol && 
+                        dest.ip !== ip
+                    );
+                    
+                    if (portInUse) {
+                        showResult(`❌ El puerto ${port}/${protocol} ya está en uso por ${portInUse.ip}. Cada puerto solo puede redirigirse a un único destino.`, false);
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.error('Error verificando puertos en uso:', err);
+                // Continuar con la validación del backend
+            }
+            
             const params = {
                 ip: ip,
                 port: port,
@@ -292,7 +316,7 @@
                     },
                     credentials: 'include',
                     body: JSON.stringify({
-                        action: 'config',
+                        action: 'add_destination',
                         params: params
                     })
                 });

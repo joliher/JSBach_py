@@ -18,8 +18,8 @@ class CommandParser:
     
     # Acciones específicas por módulo
     MODULE_ACTIONS = {
-        'firewall': ['enable_whitelist', 'disable_whitelist', 'add_rule', 'remove_rule', 'aislar', 'desaislar'],
-        'dmz': ['aislar', 'desaislar', 'eliminar'],
+        'firewall': ['enable_whitelist', 'disable_whitelist', 'add_rule', 'remove_rule', 'aislar', 'desaislar', 'restrict', 'unrestrict'],
+        'dmz': ['add_destination', 'remove_destination', 'isolate_dmz_host', 'unisolate_dmz_host', 'aislar', 'desaislar', 'eliminar'],
     }
     
     def parse(self, command_line: str) -> Dict:
