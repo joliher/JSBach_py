@@ -1,76 +1,25 @@
 # app/core/nat.py
 
-import subprocess
-import json
 import os
-import fcntl
 import re
 from typing import Dict, Any, Tuple, Optional
 from ..utils.global_functions import create_module_config_directory, create_module_log_directory
+from ..utils.validators import validate_ip_address, validate_port, validate_protocol, sanitize_interface_name
+from ..utils.helpers import (
+    load_json_config, save_json_config, update_module_status, run_command
+)
 
 # Config file in V4 structure
 CONFIG_FILE = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "config", "nat", "nat.json")
 )
 
-# -----------------------------
-# Utilidades internas
-# -----------------------------
-
-def _run_command(cmd: list) -> Tuple[bool, str]:
-    """Ejecutar comando con sudo automáticamente."""
-    try:
-        full_cmd = ["sudo"] + cmd
-        result = subprocess.run(
-            full_cmd,
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False
-        )
-        
-        if result.returncode == 0:
-            return True, result.stdout
-        else:
-            error_msg = result.stderr.strip() or "Comando falló sin mensaje de error"
-            return False, error_msg
-            
-    except subprocess.TimeoutExpired:
-        return False, f"Timeout ejecutando comando"
-    except Exception as e:
-        return False, f"Error inesperado: {str(e)}"
-
-
-def _load_config() -> Optional[dict]:
-    if not os.path.exists(CONFIG_FILE):
-        return None
-    try:
-        with open(CONFIG_FILE, "r") as f:
-            return json.load(f)
-    except Exception:
-        return None
-
-
-def _save_config(config: dict) -> None:
-    os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-    with open(CONFIG_FILE, "w") as f:
-        # Lock exclusivo para prevenir race conditions
-        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-        json.dump(config, f, indent=4)
-        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-
-
-def _update_status(status: int) -> None:
-    cfg = _load_config() or {"interface": "", "status": 0}
-    cfg["status"] = status
-    _save_config(cfg)
-
-
-def _sanitize_interface_name(name: str) -> bool:
-    """Valida que el nombre de interfaz sea seguro (solo alfanuméricos, puntos, guiones, guiones bajos)."""
-    if not name or not isinstance(name, str):
-        return False
-    return bool(re.match(r'^[a-zA-Z0-9._-]+$', name))
+# Alias helpers para compatibilidad
+_load_config = lambda: load_json_config(CONFIG_FILE, {"interface": "", "status": 0})
+_save_config = lambda config: save_json_config(CONFIG_FILE, config)
+_update_status = lambda status: update_module_status(CONFIG_FILE, status)
+_run_command = lambda cmd: run_command(cmd)
+_sanitize_interface_name = sanitize_interface_name  # Alias para compatibilidad
 
 
 # -----------------------------

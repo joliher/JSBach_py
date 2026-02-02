@@ -217,8 +217,8 @@
 
                 <div class="form-group">
                     <label>VLAN Tag</label>
-                    <input type="text" name="vlan_tag" placeholder="20,30,40">
-                    <small>💡 IDs de VLAN separados por comas para tráfico etiquetado (opcional)</small>
+                    <input type="text" name="vlan_tag" placeholder="1,2,3-10,12,14-15">
+                    <small>💡 IDs de VLAN para tráfico etiquetado. Soporta rangos: "1,2,3-10,12,14-15" (opcional)</small>
                 </div>
 
                 <button type="submit" class="submit-btn">Guardar Interface</button>
@@ -242,15 +242,43 @@ function isValidVLANId(id) {
 }
 
 function validateVLANList(vlanList) {
-    // Valida una lista de VLANs separadas por comas
+    // Valida una lista de VLANs con soporta para rangos: "1,2,3-10,12,14-15"
+    // NO soporta espacios: "3-10, 12" es inválido
     if (!vlanList) return { valid: true, errors: [] };
     
-    const ids = vlanList.split(',').map(v => v.trim()).filter(v => v);
     const errors = [];
     
-    ids.forEach(id => {
-        if (!isValidVLANId(id)) {
-            errors.push(`${id} no es un ID de VLAN válido (1-4094)`);
+    // Validar que NO haya espacios
+    if (/ /.test(vlanList)) {
+        errors.push('No se permiten espacios. Formato válido: "1,2,3-10,12,14-15"');
+        return { valid: false, errors };
+    }
+    
+    const parts = vlanList.split(',');
+    
+    parts.forEach(part => {
+        if (!part) {
+            errors.push('No se permiten comas consecutivas');
+            return;
+        }
+        
+        // Verificar si es un rango
+        if (part.includes('-')) {
+            const rangeParts = part.split('-');
+            if (rangeParts.length !== 2) {
+                errors.push(`Rango inválido: "${part}"`);
+                return;
+            }
+            const start = parseInt(rangeParts[0]);
+            const end = parseInt(rangeParts[1]);
+            if (isNaN(start) || isNaN(end) || start < 1 || start > 4094 || end < 1 || end > 4094) {
+                errors.push(`Rango inválido: "${part}" (1-4094)`);
+            }
+        } else {
+            // Valor individual
+            if (!isValidVLANId(part)) {
+                errors.push(`${part} no es un ID de VLAN válido (1-4094)`);
+            }
         }
     });
     

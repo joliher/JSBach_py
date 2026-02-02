@@ -16,12 +16,13 @@ JSBach V4.0 es un sistema completo de gestión de router que permite configurar 
 
 ### Módulos disponibles
 
-- **WAN**: Configuración de interfaz de red externa
-- **NAT**: Network Address Translation
-- **Firewall**: Gestión de reglas de seguridad y whitelist por VLAN
-- **DMZ**: Zona desmilitarizada para servicios expuestos
+- **WAN**: Configuración de interfaz de red externa (DHCP/Estática)
 - **VLANs**: Creación y gestión de redes virtuales
-- **Tagging**: Etiquetado de tráfico en interfaces
+- **Firewall**: Gestión de reglas de seguridad y whitelist por VLAN
+- **NAT**: Network Address Translation para enmascaramiento de red
+- **DMZ**: Zona desmilitarizada para servicios expuestos
+- **Tagging**: Etiquetado de tráfico VLAN en interfaces físicas
+- **Ebtables**: Aislamiento de VLANs a nivel de capa 2 (Ethernet)
 
 ---
 
@@ -118,11 +119,41 @@ Credenciales: las mismas que la interfaz web.
 
 ## 📚 Documentación
 
+### Ayuda desde el CLI
+
 Para información detallada sobre comandos y uso del sistema:
 
 - **Interfaz CLI**: Conecta al CLI y escribe `help` para ver todos los comandos disponibles
-- **Ayuda por módulo**: Escribe `help <módulo>` (ej: `help wan`, `help firewall`) para ayuda específica
-- **Documentación técnica**: [app/cli/help/CLI_COMMANDS.md](app/cli/help/CLI_COMMANDS.md)
+- **Ayuda por módulo**: Escribe `help <módulo>` (ej: `help wan`, `help firewall`, `help ebtables`)
+- **Documentación detallada**: Cada módulo tiene documentación completa en `app/cli/help/`
+
+### Módulos documentados
+
+| Módulo | Archivo | Descripción |
+|--------|---------|-------------|
+| WAN | [wan.md](app/cli/help/wan.md) | Configuración de interfaz WAN (DHCP/Estática) |
+| VLANs | [vlans.md](app/cli/help/vlans.md) | Creación y gestión de redes virtuales |
+| Firewall | [firewall.md](app/cli/help/firewall.md) | Reglas de seguridad y whitelists |
+| NAT | [nat.md](app/cli/help/nat.md) | Network Address Translation |
+| DMZ | [dmz.md](app/cli/help/dmz.md) | Zona desmilitarizada |
+| Tagging | [tagging.md](app/cli/help/tagging.md) | Etiquetado VLAN en interfaces |
+| Ebtables | [ebtables.md](app/cli/help/ebtables.md) | Aislamiento L2 de VLANs |
+
+### Pruebas
+
+Ejecuta el suite de pruebas para validar la instalación:
+
+```bash
+cd /opt/JSBach_V4.0
+python3 test_web_endpoints.py
+```
+
+Este script prueba:
+- ✅ Autenticación y acceso web
+- ✅ Endpoints de API `/admin`
+- ✅ Archivos estáticos (CSS/JS modulares)
+- ✅ Protección de rutas sin autenticación
+- ✅ Configuraciones de todos los módulos
 
 ---
 
@@ -155,40 +186,69 @@ El desinstalador te preguntará qué elementos deseas eliminar:
 JSBach_V4.0/
 ├── app/
 │   ├── cli/          # Interfaz CLI (servidor TCP)
-│   │   └── help/     # Archivos de ayuda CLI
+│   │   └── help/     # Documentación de módulos (Markdown)
 │   ├── controllers/  # Controladores FastAPI
-│   ├── core/         # Módulos principales (NAT, Firewall, etc.)
-│   └── utils/        # Utilidades compartidas
-├── config/           # Archivos de configuración JSON
+│   │   ├── main_controller.py   # Rutas principales y middleware
+│   │   └── admin_router.py      # API de administración
+│   ├── core/         # Módulos de red (wan, nat, firewall, etc.)
+│   └── utils/        # Utilidades compartidas (helpers, auth, logging)
+├── config/           # Configuraciones JSON por módulo
 ├── install/          # Scripts de instalación/desinstalación
-├── logs/             # Logs del sistema
-├── web/              # Interfaz web (HTML/CSS/JS)
+├── logs/             # Logs del sistema por módulo
+├── web/              # Interfaz web
+│   ├── 00-css/       # Estilos CSS modulares
+│   ├── 00-js/        # JavaScript modular
+│   └── [module]/     # Páginas HTML por módulo
 └── main.py           # Punto de entrada de la aplicación
 ```
 
 ### Tecnologías utilizadas
 
-- **Backend**: Python 3, FastAPI, uvicorn
-- **Frontend**: HTML5, CSS3, JavaScript vanilla
-- **CLI**: asyncio, socket TCP
-- **Sistema**: systemd, iptables, iproute2
+- **Backend**: Python 3.8+, FastAPI, Uvicorn
+- **Frontend**: HTML5, CSS3 modular, JavaScript vanilla
+- **CLI**: asyncio, socket TCP (puerto 2200)
+- **Networking**: iptables, iproute2, ebtables
+- **Sistema**: systemd, sudoers
+
+### Arquitectura
+
+- **Helpers centralizados**: Módulos compartidos en `app/utils/` para config, validación y logging
+- **API RESTful**: Endpoints en `/admin/` para gestión de módulos
+- **Frontend modular**: CSS y JS separados en carpetas `00-css/` y `00-js/`
+- **Autenticación**: Sistema de sesiones con middleware de protección
+- **Logs estructurados**: Registro de acciones por módulo en `logs/`
 
 ---
 
-## 🧪 Pruebas
+## ⚙️ Características Técnicas
 
-Ejecuta el suite de pruebas automatizadas:
+### Backend Modularizado
 
-```bash
-cd /opt/JSBach_V4.0
-python3 install/test_services.py
-```
+- **Helpers centralizados**: Todas las funciones comunes (carga de configs, validación, logging) en `app/utils/`
+- **Reducción de código duplicado**: ~1,200 líneas de código reutilizable
+- **Gestión de errores consistente**: Manejo uniforme en todos los módulos
+- **Logging estructurado**: Registro detallado de todas las acciones
 
-Este script prueba:
-- ✅ Configuración de VLANs, Firewall, DMZ, Tagging
-- ✅ Activación/desactivación de servicios
-- ✅ Comandos CLI y endpoints Web
-- ✅ 33 pruebas automatizadas
+### Frontend Modular
+
+- **CSS separado**: 5 archivos CSS modulares (global, buttons, cards, forms, header)
+- **JavaScript separado**: 2 archivos JS (app.js, utils.js)
+- **Sin dependencias externas**: HTML/CSS/JS vanilla, sin frameworks
+- **Responsive**: Diseño adaptable a diferentes resoluciones
+
+### API RESTful
+
+- **Endpoints documentados**: API completa en `/admin/`
+- **Autenticación por sesión**: Middleware de protección
+- **Respuestas JSON**: Formato estándar para todas las respuestas
+- **Gestión de errores**: Códigos HTTP apropiados (200, 400, 404, etc.)
+
+### Seguridad
+
+- **Autenticación obligatoria**: Todas las rutas protegidas por login
+- **Hashing de contraseñas**: SHA256 para almacenamiento seguro
+- **Validación de inputs**: Sanitización de parámetros en todos los módulos
+- **Logs de auditoría**: Registro de todas las acciones administrativas
 
 ---
 

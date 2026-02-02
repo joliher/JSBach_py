@@ -119,6 +119,7 @@
     <button data-action="tagging" onclick="irSeccion('tagging')">TAGGING</button>
     <button data-action="firewall" onclick="irSeccion('firewall')">FIREWALL</button>
     <button data-action="dmz" onclick="irSeccion('dmz')">DMZ</button>
+    <button data-action="ebtables" onclick="irSeccion('ebtables')">EBTABLES</button>
   </div>
 
   <!-- USUARIO Y LOGOUT -->
@@ -136,6 +137,7 @@
       sessionStorage.removeItem('dmzSelected');
       sessionStorage.removeItem('natSelected');
       sessionStorage.removeItem('taggingSelected');
+      sessionStorage.removeItem('ebtablesSelected');
       
       window.top.location.href = '/web/' + section + '/index.html';
   }

@@ -143,8 +143,11 @@
                     const tableBody = document.getElementById("status-table");
                     tableBody.innerHTML = "";  // Limpiar tabla antes de llenarla
 
-                    Object.keys(data).forEach(module => {
-                        const status = data[module];
+                    // Orden de módulos por dependencias (de arriba a abajo: descendientes -> base)
+                    const moduleOrder = ['ebtables', 'dmz', 'firewall', 'nat', 'tagging', 'vlans', 'wan'];
+                    
+                    moduleOrder.forEach(module => {
+                        const status = data[module] || 'DESCONOCIDO';
                         let statusClass = 'desconocido';
                         if (status === 'ACTIVO') {
                             statusClass = 'activo';
@@ -172,8 +175,10 @@
         
         // Función para detener todos los módulos
         async function stopAllModules() {
-            // NAT debe detenerse después de firewall y dmz (tiene dependencias)
-            const modules = ['wan', 'firewall', 'dmz', 'nat', 'vlans', 'tagging'];
+            // Orden de detención: inverso de las dependencias
+            // Ebtables (depende de WAN, VLANs, Tagging) → Firewall (depende de VLANs) → DMZ (depende de NAT)
+            // → NAT (depende de WAN) → Tagging (depende de VLANs) → VLANs → WAN
+            const modules = ['ebtables', 'firewall', 'dmz', 'nat', 'tagging', 'vlans', 'wan'];
             const stopBtn = document.getElementById('stop-btn');
             const messageDiv = document.getElementById('stop-message');
             

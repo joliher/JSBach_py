@@ -11,7 +11,7 @@ class CommandParser:
     """Parses and validates CLI commands"""
     
     # Módulos disponibles
-    MODULES = ['wan', 'nat', 'firewall', 'dmz', 'vlans', 'tagging']
+    MODULES = ['wan', 'nat', 'firewall', 'dmz', 'vlans', 'tagging', 'ebtables']
     
     # Acciones comunes
     COMMON_ACTIONS = ['start', 'stop', 'restart', 'status', 'config']

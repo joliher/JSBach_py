@@ -2,15 +2,15 @@
 # Módulo de DMZ - Arquitectura jerárquica con cadenas por VLAN
 # VERSION 2.0 - Refactorización completa
 
-import subprocess
-import json
 import os
 import logging
 import ipaddress
-import fcntl
-import re
 from typing import Dict, Any, Tuple, Optional, List
 from ..utils.global_functions import create_module_config_directory, create_module_log_directory
+from ..utils.validators import validate_ip_address, validate_port, validate_protocol
+from ..utils.helpers import (
+    load_json_config, save_json_config, run_command, write_log_file
+)
 
 # Configurar logging
 logger = logging.getLogger(__name__)
@@ -28,31 +28,8 @@ LOG_FILE = os.path.join(BASE_DIR, "logs", "dmz", "actions.log")
 # UTILIDADES BÁSICAS
 # =============================================================================
 
-def _run_command(cmd: list) -> Tuple[bool, str]:
-    """Ejecutar comando con sudo automáticamente."""
-    try:
-        full_cmd = ["/usr/bin/sudo"] + cmd
-        result = subprocess.run(
-            full_cmd,
-            capture_output=True,
-            text=True,
-            timeout=30,
-            check=False
-        )
-        
-        if result.returncode == 0:
-            return True, result.stdout
-        else:
-            error_msg = result.stderr.strip() or "Comando falló sin mensaje de error"
-            logger.error(f"Error ejecutando comando {' '.join(full_cmd)}: {error_msg}")
-            return False, error_msg
-            
-    except subprocess.TimeoutExpired:
-        logger.error(f"Timeout ejecutando comando {' '.join(full_cmd)}")
-        return False, f"Timeout ejecutando comando"
-    except Exception as e:
-        logger.error(f"Error inesperado ejecutando comando {' '.join(full_cmd)}: {e}")
-        return False, f"Error inesperado: {str(e)}"
+# Alias para helpers
+_run_command = lambda cmd: run_command(cmd)
 
 
 def _ensure_dirs():
@@ -61,100 +38,38 @@ def _ensure_dirs():
     os.makedirs(os.path.join(BASE_DIR, "logs", "dmz"), exist_ok=True)
 
 
-def _sanitize_interface_name(name: str) -> bool:
-    """Valida que el nombre de interfaz sea seguro (solo alfanuméricos, puntos, guiones, guiones bajos)."""
-    if not name or not isinstance(name, str):
-        return False
-    return bool(re.match(r'^[a-zA-Z0-9._-]+$', name))
-
-
 def _write_log(message: str):
     """Escribir mensaje en el archivo de log."""
     from datetime import datetime
     _ensure_dirs()
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    try:
-        with open(LOG_FILE, "a") as f:
-            f.write(f"[{timestamp}] {message}\n")
-    except Exception as e:
-        logger.error(f"Error escribiendo en log: {e}")
+    write_log_file(LOG_FILE, f"[{timestamp}] {message}")
 
 
 def _load_config() -> dict:
-    """Cargar configuración de DMZ."""
-    if not os.path.exists(CONFIG_FILE):
-        default_config = {"status": 0, "destinations": []}
-        _save_config(default_config)
-        return default_config
-    
-    try:
-        with open(CONFIG_FILE, "r") as f:
-            content = f.read().strip()
-            if not content:
-                logger.warning("Archivo DMZ config vacío, usando configuración por defecto")
-                default_config = {"status": 0, "destinations": []}
-                _save_config(default_config)
-                return default_config
-            
-            return json.loads(content)
-    except json.JSONDecodeError as e:
-        logger.error(f"Error decodificando DMZ config JSON: {e}")
-        default_config = {"status": 0, "destinations": []}
-        _save_config(default_config)
-        return default_config
-    except Exception as e:
-        logger.error(f"Error cargando DMZ config: {e}")
-        return {"status": 0, "destinations": []}
+    """Cargar configuración de DMZ usando helpers."""
+    cfg = load_json_config(CONFIG_FILE, {"status": 0, "destinations": []})
+    return cfg if cfg else {"status": 0, "destinations": []}
 
 
 def _save_config(data: dict) -> None:
-    """Guardar configuración de DMZ."""
-    _ensure_dirs()
-    try:
-        with open(CONFIG_FILE, "w") as f:
-            # Lock exclusivo para prevenir race conditions
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-            json.dump(data, f, indent=4)
-            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-        logger.info("Configuración DMZ guardada correctamente")
-    except Exception as e:
-        logger.error(f"Error guardando configuración DMZ: {e}")
+    """Guardar configuración de DMZ usando helpers."""
+    save_json_config(CONFIG_FILE, data)
 
 
 def _load_wan_config() -> Optional[dict]:
-    """Cargar configuración de WAN para obtener la interfaz."""
-    if not os.path.exists(WAN_CONFIG_FILE):
-        return None
-    try:
-        with open(WAN_CONFIG_FILE, "r") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Error cargando WAN config: {e}")
-        return None
+    """Cargar configuración de WAN para obtener la interfaz usando helpers."""
+    return load_json_config(WAN_CONFIG_FILE)
 
 
 def _load_firewall_config() -> Optional[dict]:
-    """Cargar configuración del firewall."""
-    if not os.path.exists(FIREWALL_CONFIG_FILE):
-        return None
-    try:
-        with open(FIREWALL_CONFIG_FILE, "r") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Error cargando firewall config: {e}")
-        return None
+    """Cargar configuración del firewall usando helpers."""
+    return load_json_config(FIREWALL_CONFIG_FILE)
 
 
 def _load_vlans_config() -> Optional[dict]:
-    """Cargar configuración de VLANs."""
-    if not os.path.exists(VLANS_CONFIG_FILE):
-        return None
-    try:
-        with open(VLANS_CONFIG_FILE, "r") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Error cargando VLANs config: {e}")
-        return None
+    """Cargar configuración de VLANs usando helpers."""
+    return load_json_config(VLANS_CONFIG_FILE)
 
 
 def _get_vlan_from_ip(ip: str) -> Optional[int]:

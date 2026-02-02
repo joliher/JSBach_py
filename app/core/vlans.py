@@ -1,21 +1,26 @@
 # app/core/vlans.py
 
-import subprocess
-import json
 import os
-import fcntl
 import re
+import subprocess
 from typing import Dict, Any, Tuple, Optional
 from ..utils.global_functions import create_module_config_directory, create_module_log_directory
+from ..utils.validators import validate_vlan_id, validate_ip_network
+from ..utils.helpers import (
+    load_json_config, save_json_config, update_module_status, run_command
+)
 
 # Config file in V4 structure
 CONFIG_FILE = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "config", "vlans", "vlans.json")
 )
 
-# -----------------------------
-# Utilidades internas
-# -----------------------------
+# Alias helpers para compatibilidad
+_load_config = lambda: load_json_config(CONFIG_FILE, {"vlans": [], "status": 0})
+_save_config = lambda data: save_json_config(CONFIG_FILE, data)
+_update_status = lambda status: update_module_status(CONFIG_FILE, status)
+_run_cmd = lambda cmd, ignore_error=False: run_command(cmd)[0]
+
 
 def _initialize_default_vlans() -> None:
     """Asegurar que VLANs 1 y 2 existan siempre por defecto."""
@@ -46,51 +51,8 @@ def _initialize_default_vlans() -> None:
     _save_config(cfg)
 
 
-def _load_config() -> dict:
-    if not os.path.exists(CONFIG_FILE):
-        return {"vlans": [], "status": 0}
-    try:
-        with open(CONFIG_FILE, "r") as f:
-            data = json.load(f)
-            if "status" not in data:
-                data["status"] = 0
-            return data
-    except Exception:
-        return {"vlans": [], "status": 0}
-
-
-def _save_config(data: dict) -> None:
-    os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
-    with open(CONFIG_FILE, "w") as f:
-        # Lock exclusivo para prevenir race conditions
-        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-        json.dump(data, f, indent=4)
-        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-
-
-def _update_status(status: int) -> None:
-    cfg = _load_config()
-    cfg["status"] = status
-    _save_config(cfg)
-
-
-def _sanitize_interface_name(name: str) -> bool:
-    """Valida que el nombre de interfaz sea seguro (solo alfanuméricos, puntos, guiones, guiones bajos)."""
-    if not name or not isinstance(name, str):
-        return False
-    return bool(re.match(r'^[a-zA-Z0-9._-]+$', name))
-
-
 def _bridge_exists() -> bool:
     return os.path.exists("/sys/class/net/br0")
-
-
-def _run_cmd(cmd: list, ignore_error: bool = False) -> bool:
-    try:
-        subprocess.run(["sudo"] + cmd, check=not ignore_error)
-        return True
-    except subprocess.CalledProcessError:
-        return False
 
 
 # -----------------------------
@@ -181,9 +143,21 @@ def status(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     vlans = cfg.get("vlans", [])
     
     # Verificar si el bridge br0 existe y está UP
-    success, br0_info = _run_command(["/usr/sbin/ip", "a", "show", "br0"])
-    br0_exists = success
-    br0_is_up = "state UP" in br0_info if success else False
+    br0_exists = _bridge_exists()
+    br0_is_up = False
+    
+    if br0_exists:
+        try:
+            result = subprocess.run(
+                ["sudo", "/usr/sbin/ip", "a", "show", "br0"],
+                capture_output=True,
+                text=True,
+                check=True,
+                timeout=5
+            )
+            br0_is_up = "state UP" in result.stdout
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+            pass
     
     status_lines = ["Estado de VLANs:", "=" * 50]
     
@@ -208,14 +182,19 @@ def status(params: Dict[str, Any] = None) -> Tuple[bool, str]:
             
             # Verificar si la subinterfaz br0.X existe y está UP
             subif_name = f"br0.{vlan_id}"
-            success, subif_info = _run_command(["/usr/sbin/ip", "a", "show", subif_name])
-            
-            if success:
-                is_up = "state UP" in subif_info
-                has_ip = f"inet {ip_int.split('/')[0]}" in subif_info if '/' in ip_int else False
+            try:
+                result = subprocess.run(
+                    ["sudo", "/usr/sbin/ip", "a", "show", subif_name],
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                    timeout=5
+                )
+                is_up = "state UP" in result.stdout
+                has_ip = f"inet {ip_int.split('/')[0]}" in result.stdout if '/' in ip_int else False
                 subif_status = "🟢 UP" if is_up else "🔴 DOWN"
                 ip_status = " ✅" if has_ip else " ⚠️ Sin IP"
-            else:
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
                 subif_status = "❌ NO EXISTE"
                 ip_status = ""
             

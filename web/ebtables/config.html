@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ebtables - Configuración</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 20px;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        h1 {
+            color: #764ba2;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .section {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .section h2 {
+            color: #764ba2;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
+        .vlan-list {
+            display: grid;
+            gap: 15px;
+        }
+        .vlan-item {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+        }
+        .vlan-info {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+        .vlan-id {
+            background: #764ba2;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            min-width: 80px;
+            text-align: center;
+        }
+        .vlan-status {
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 14px;
+        }
+        .isolated {
+            background: #eb3349;
+            color: white;
+        }
+        .not-isolated {
+            background: #38ef7d;
+            color: white;
+        }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+        }
+        .btn {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .btn-isolate {
+            background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+            color: white;
+        }
+        .btn-unisolate {
+            background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+            color: white;
+        }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+        }
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+        .loading {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            justify-content: center;
+            padding: 30px;
+        }
+        .spinner {
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #764ba2;
+            border-radius: 50%;
+            width: 30px;
+            height: 30px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .alert-info {
+            background: #d1ecf1;
+            border-left: 4px solid #0c5460;
+            color: #0c5460;
+        }
+        .alert-warning {
+            background: #fff3cd;
+            border-left: 4px solid #856404;
+            color: #856404;
+        }
+        .alert-success {
+            background: #d4edda;
+            border-left: 4px solid #155724;
+            color: #155724;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>⚙️ Configuración de Aislamiento de VLANs</h1>
+        
+        <div class="alert alert-info">
+            <strong>ℹ️ Información:</strong> El aislamiento de VLANs se realiza a nivel de capa 2 mediante ebtables.
+            Cuando una VLAN está aislada, solo puede comunicarse con la interfaz WAN.
+        </div>
+
+        <div id="messageContainer"></div>
+
+        <div class="section">
+            <h2>🔧 VLANs Disponibles</h2>
+            <div id="vlanContainer">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <span>Cargando VLANs...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        async function loadVlans() {
+            const container = document.getElementById('vlanContainer');
+            
+            try {
+                // Verificar primero si el módulo ebtables está activo
+                const ebtablesInfoResponse = await fetch('/admin/ebtables/info', {
+                    credentials: 'include'
+                });
+                const ebtablesInfo = await ebtablesInfoResponse.json();
+                
+                if (ebtablesInfo.status !== 1) {
+                    container.innerHTML = `
+                        <div style="text-align: center; padding: 40px; color: #eb3349;">
+                            <div style="font-size: 48px; margin-bottom: 20px;">⚠️</div>
+                            <h2 style="color: #eb3349; margin-bottom: 10px;">Módulo EBTABLES Inactivo</h2>
+                            <p style="color: #666; font-size: 16px;">
+                                El módulo EBTABLES debe estar activo para configurar el aislamiento de VLANs.
+                            </p>
+                            <p style="color: #666; font-size: 14px; margin-top: 20px;">
+                                Por favor, inicie el módulo desde el menú antes de continuar.
+                            </p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Obtener configuración de VLANs
+                const vlansResponse = await fetch('/admin/config/vlans/vlans.json', {
+                    credentials: 'include'
+                });
+                const vlansData = await vlansResponse.json();
+                
+                // Obtener estado del ebtables
+                const ebtablesResponse = await fetch('/admin/config/ebtables/ebtables.json', {
+                    credentials: 'include'
+                });
+                const ebtablesData = await ebtablesResponse.json();
+                
+                if (!vlansData.vlans || vlansData.vlans.length === 0) {
+                    container.innerHTML = `
+                        <div style="text-align: center; padding: 30px; color: #666;">
+                            No hay VLANs configuradas. 
+                            <br>Por favor, configure las VLANs primero en el módulo VLANs.
+                        </div>
+                    `;
+                    return;
+                }
+                
+                // Crear mapa de estado de aislamiento
+                const isolationMap = {};
+                if (ebtablesData.vlans) {
+                    // ebtablesData.vlans es un objeto con vlan_id como clave
+                    Object.keys(ebtablesData.vlans).forEach(vlanId => {
+                        const vlanConfig = ebtablesData.vlans[vlanId];
+                        isolationMap[vlanId] = vlanConfig.isolated || false;
+                    });
+                }
+                
+                // Generar HTML para cada VLAN
+                let html = '<div class="vlan-list">';
+                vlansData.vlans.forEach(vlan => {
+                    const isIsolated = isolationMap[vlan.id] || false;
+                    html += `
+                        <div class="vlan-item">
+                            <div class="vlan-info">
+                                <div class="vlan-id">VLAN ${vlan.id}</div>
+                                <div class="vlan-status ${isIsolated ? 'isolated' : 'not-isolated'}">
+                                    ${isIsolated ? '🔒 AISLADA' : '🔓 NO AISLADA'}
+                                </div>
+                            </div>
+                            <div class="btn-group">
+                                <button class="btn btn-isolate" 
+                                        onclick="isolateVlan(${vlan.id})"
+                                        ${isIsolated ? 'disabled' : ''}>
+                                    🔒 Aislar
+                                </button>
+                                <button class="btn btn-unisolate" 
+                                        onclick="unisolateVlan(${vlan.id})"
+                                        ${!isIsolated ? 'disabled' : ''}>
+                                    🔓 Desaislar
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                
+                container.innerHTML = html;
+                
+            } catch (error) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 30px; color: #eb3349;">
+                        ❌ Error al cargar las VLANs: ${escapeHtml(error.message)}
+                    </div>
+                `;
+            }
+        }
+
+        async function isolateVlan(vlanId) {
+            if (!confirm(`¿Confirma que desea AISLAR la VLAN ${vlanId}?\n\nSolo podrá comunicarse con la WAN.`)) {
+                return;
+            }
+            
+            await executeAction('aislar', vlanId);
+        }
+
+        async function unisolateVlan(vlanId) {
+            if (!confirm(`¿Confirma que desea DESAISLAR la VLAN ${vlanId}?`)) {
+                return;
+            }
+            
+            await executeAction('desaislar', vlanId);
+        }
+
+        async function executeAction(action, vlanId) {
+            const messageContainer = document.getElementById('messageContainer');
+            messageContainer.innerHTML = `
+                <div class="alert alert-info">
+                    ⏳ Procesando acción ${action} para VLAN ${vlanId}...
+                </div>
+            `;
+            
+            try {
+                const response = await fetch('/admin/ebtables', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: action,
+                        params: {
+                            vlan_id: vlanId.toString()
+                        }
+                    }),
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    messageContainer.innerHTML = `
+                        <div class="alert alert-success">
+                            ✅ ${escapeHtml(data.message)}
+                        </div>
+                    `;
+                    // Recargar lista
+                    setTimeout(loadVlans, 1000);
+                } else {
+                    messageContainer.innerHTML = `
+                        <div class="alert alert-warning">
+                            ⚠️ ${escapeHtml(data.message)}
+                        </div>
+                    `;
+                }
+                
+                // Limpiar mensaje después de 5 segundos
+                setTimeout(() => {
+                    messageContainer.innerHTML = '';
+                }, 5000);
+                
+            } catch (error) {
+                messageContainer.innerHTML = `
+                    <div class="alert alert-warning">
+                        ❌ Error al ejecutar acción: ${escapeHtml(error.message)}
+                    </div>
+                `;
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Cargar VLANs al iniciar
+        window.addEventListener('DOMContentLoaded', loadVlans);
+    </script>
+</body>
+</html>

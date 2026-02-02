@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>EBTABLES - Menú</title>
+    <style>
+        html, body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            padding: 10px;
+            background-color: #f5f5f5;
+        }
+        h3 {
+            margin-top: 0;
+            color: #333;
+        }
+        button {
+            display: block;
+            width: 100%;
+            margin: 5px 0;
+            padding: 10px 12px;
+            cursor: pointer;
+            border: 1px solid #ccc;
+            background-color: #fff;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        button:hover {
+            background-color: #e8f4ff;
+        }
+        button.selected {
+            background-color: #3399ff;
+            color: white;
+            border-color: #007acc;
+            font-weight: bold;
+        }
+        hr {
+            border: none;
+            border-top: 1px solid #ddd;
+            margin: 15px 0;
+        }
+        .status-box {
+            background: #f8f9fa;
+            border: 2px solid #dee2e6;
+            border-radius: 6px;
+            padding: 8px 12px;
+            margin: 10px 0;
+            text-align: center;
+            font-size: 13px;
+            transition: all 0.3s;
+        }
+        .status-box.activo {
+            background: #d4edda;
+            border-color: #28a745;
+            color: #155724;
+        }
+        .status-box.inactivo {
+            background: #f8d7da;
+            border-color: #dc3545;
+            color: #721c24;
+        }
+        .status-box.desconocido {
+            background: #fff3cd;
+            border-color: #ffc107;
+            color: #856404;
+        }
+        .dependency-warning {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 6px;
+            padding: 8px 10px;
+            margin: 10px 0;
+            font-size: 12px;
+            color: #856404;
+        }
+    </style>
+</head>
+<body>
+
+<h3>🌉 EBTABLES</h3>
+
+<div class="status-box" id="module-status">Estado: Cargando...</div>
+
+<div class="dependency-warning">
+    <strong>⚠️ Dependencias requeridas:</strong><br>
+    <div id="dep-wan" style="margin: 3px 0;">🔄 WAN: Comprobando...</div>
+    <div id="dep-vlans" style="margin: 3px 0;">🔄 VLANs: Comprobando...</div>
+    <div id="dep-tagging" style="margin: 3px 0;">🔄 Tagging: Comprobando...</div>
+</div>
+
+<button type="button" id="btnStart"   onclick="runEbtables(event, 'start', this)">🚀 EBTABLES START</button>
+<button type="button" id="btnStop"    onclick="runEbtables(event, 'stop', this)">🛑 EBTABLES STOP</button>
+<button type="button" id="btnRestart" onclick="runEbtables(event, 'restart', this)">🔄 EBTABLES RESTART</button>
+<button type="button" id="btnStatus"  onclick="runEbtables(event, 'status', this)">📊 EBTABLES STATUS</button>
+
+<hr>
+
+<button type="button" onclick="goConfig(event, this)">⚙️ CONFIGURAR AISLAMIENTO</button>
+<button type="button" onclick="goInfo(event, this)">📖 INFORMACIÓN</button>
+
+
+<script>
+let statusCheckInterval;
+
+function runEbtables(evt, action, btn) {
+    evt.preventDefault();
+
+    // Marcar botón seleccionado
+    document.querySelectorAll('button').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+
+    const iframe = parent.frames['body'];
+    if (action === "start" || action === "stop" || action === "restart" || action === "status") {
+        iframe.location.href = "/web/ebtables/status.html";
+        
+        fetch('/admin/ebtables', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: action }),
+            credentials: 'include'
+        }).catch(err => console.error('Error:', err));
+    }
+}
+
+function goConfig(evt, btn) {
+    evt.preventDefault();
+    document.querySelectorAll('button').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    parent.frames['body'].location.href = "/web/ebtables/config.html";
+}
+
+function goInfo(evt, btn) {
+    evt.preventDefault();
+    document.querySelectorAll('button').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    parent.frames['body'].location.href = "/web/ebtables/info.html";
+}
+
+async function checkModuleStatus() {
+    try {
+        const response = await fetch('/admin/ebtables/info', {
+            credentials: 'include'
+        });
+        const data = await response.json();
+        
+        const statusBox = document.getElementById('module-status');
+        if (data.status === 1) {
+            statusBox.textContent = 'Estado: ACTIVO';
+            statusBox.className = 'status-box activo';
+        } else {
+            statusBox.textContent = 'Estado: INACTIVO';
+            statusBox.className = 'status-box inactivo';
+        }
+    } catch (error) {
+        document.getElementById('module-status').textContent = 'Estado: DESCONOCIDO';
+        document.getElementById('module-status').className = 'status-box desconocido';
+    }
+}
+
+async function checkDependencies() {
+    // Verificar WAN
+    try {
+        const wanResp = await fetch('/admin/wan/info', { credentials: 'include' });
+        const wanData = await wanResp.json();
+        const wanDiv = document.getElementById('dep-wan');
+        if (wanData.status === 1) {
+            wanDiv.innerHTML = '✅ WAN: Activo';
+            wanDiv.style.color = '#155724';
+        } else {
+            wanDiv.innerHTML = '❌ WAN: Inactivo';
+            wanDiv.style.color = '#721c24';
+        }
+    } catch {
+        document.getElementById('dep-wan').innerHTML = '⚠️ WAN: Error al verificar';
+    }
+
+    // Verificar VLANs
+    try {
+        const vlansResp = await fetch('/admin/vlans/info', { credentials: 'include' });
+        const vlansData = await vlansResp.json();
+        const vlansDiv = document.getElementById('dep-vlans');
+        if (vlansData.status === 1) {
+            vlansDiv.innerHTML = '✅ VLANs: Activo';
+            vlansDiv.style.color = '#155724';
+        } else {
+            vlansDiv.innerHTML = '❌ VLANs: Inactivo';
+            vlansDiv.style.color = '#721c24';
+        }
+    } catch {
+        document.getElementById('dep-vlans').innerHTML = '⚠️ VLANs: Error al verificar';
+    }
+
+    // Verificar Tagging
+    try {
+        const taggingResp = await fetch('/admin/tagging/info', { credentials: 'include' });
+        const taggingData = await taggingResp.json();
+        const taggingDiv = document.getElementById('dep-tagging');
+        if (taggingData.status === 1) {
+            taggingDiv.innerHTML = '✅ Tagging: Activo';
+            taggingDiv.style.color = '#155724';
+        } else {
+            taggingDiv.innerHTML = '❌ Tagging: Inactivo';
+            taggingDiv.style.color = '#721c24';
+        }
+    } catch {
+        document.getElementById('dep-tagging').innerHTML = '⚠️ Tagging: Error al verificar';
+    }
+}
+
+// Verificar estado inicial
+checkModuleStatus();
+checkDependencies();
+
+// Actualizar estado cada 5 segundos
+statusCheckInterval = setInterval(() => {
+    checkModuleStatus();
+    checkDependencies();
+}, 5000);
+
+// Limpiar intervalo al salir
+window.addEventListener('beforeunload', () => {
+    if (statusCheckInterval) clearInterval(statusCheckInterval);
+});
+</script>
+</body>
+</html>

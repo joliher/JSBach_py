@@ -11,7 +11,7 @@ from app.utils import global_functions as gf
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-ALLOWED_MODULES = ["wan", "nat", "firewall", "vlans", "tagging", "dmz"]
+ALLOWED_MODULES = ["wan", "nat", "firewall", "vlans", "tagging", "dmz", "ebtables"]
 
 # Config directory for JSBach_V4.0
 BASE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
@@ -37,7 +37,8 @@ def get_status_from_config(module_name: str) -> str:
         "firewall": os.path.join(CONFIG_DIR, "firewall", "firewall.json"),
         "vlans": os.path.join(CONFIG_DIR, "vlans", "vlans.json"),
         "tagging": os.path.join(CONFIG_DIR, "tagging", "tagging.json"),
-        "dmz": os.path.join(CONFIG_DIR, "dmz", "dmz.json")
+        "dmz": os.path.join(CONFIG_DIR, "dmz", "dmz.json"),
+        "ebtables": os.path.join(CONFIG_DIR, "ebtables", "ebtables.json")
     }
     
     config_file = config_paths.get(module_name)
@@ -79,6 +80,35 @@ async def get_status(_: None = Depends(require_login)):
     for module in ALLOWED_MODULES:
         status_info[module] = get_status_from_config(module)
     return status_info
+
+
+@router.get("/{module_name}/info")
+async def get_module_info(module_name: str, _: None = Depends(require_login)):
+    """Obtener información de estado de un módulo específico."""
+    if module_name not in ALLOWED_MODULES:
+        raise HTTPException(status_code=404, detail="Módulo no encontrado")
+    
+    # Mapeo de módulos a sus rutas de configuración
+    config_paths = {
+        "wan": os.path.join(CONFIG_DIR, "wan", "wan.json"),
+        "nat": os.path.join(CONFIG_DIR, "nat", "nat.json"),
+        "firewall": os.path.join(CONFIG_DIR, "firewall", "firewall.json"),
+        "vlans": os.path.join(CONFIG_DIR, "vlans", "vlans.json"),
+        "tagging": os.path.join(CONFIG_DIR, "tagging", "tagging.json"),
+        "dmz": os.path.join(CONFIG_DIR, "dmz", "dmz.json"),
+        "ebtables": os.path.join(CONFIG_DIR, "ebtables", "ebtables.json")
+    }
+    
+    config_file = config_paths.get(module_name)
+    if not config_file or not os.path.exists(config_file):
+        return {"status": 0}
+    
+    try:
+        with open(config_file, "r") as f:
+            config = json.load(f)
+        return {"status": config.get("status", 0)}
+    except Exception:
+        return {"status": 0}
 
 
 @router.get("/logs/{module_name}", response_class=Response)
@@ -123,8 +153,15 @@ async def get_config_file(module_name: str, config_file: str, _: None = Depends(
 
 # -----------------------------
 # Core executor
-# -----------------------------
 def execute_module_action(module_name: str, action: str, params: Optional[dict] = None) -> Tuple[bool, str]:
+    # Verificar dependencias ANTES de ejecutar la acción start
+    if action == "start":
+        deps_ok, deps_msg = gf.check_module_dependencies(module_name)
+        if not deps_ok:
+            error_msg = f"No se puede iniciar {module_name}: {deps_msg}"
+            gf.log_action(module_name, f"start - ERROR: {error_msg}")
+            return False, error_msg
+    
     if action.startswith("_"):
         gf.log_action(module_name, f"Acción '{action}' no permitida")
         return False, "Acción no permitida"

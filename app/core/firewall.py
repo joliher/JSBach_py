@@ -2,17 +2,18 @@
 # Módulo de Firewall - Arquitectura jerárquica con cadenas por VLAN
 # VERSION 2.0 - Refactorización completa
 
-import subprocess
-import json
 import os
-import logging
-import fcntl
 import re
+import logging
 from typing import Dict, Any, Tuple, List
 from ..utils.global_functions import (
     create_module_config_directory,
     create_module_log_directory,
     log_action
+)
+from ..utils.validators import validate_vlan_id, validate_ip_address
+from ..utils.helpers import (
+    load_json_config, save_json_config, run_command
 )
 
 # Configurar logging
@@ -24,10 +25,13 @@ FIREWALL_CONFIG_FILE = os.path.join(BASE_DIR, "config", "firewall", "firewall.js
 VLANS_CONFIG_FILE = os.path.join(BASE_DIR, "config", "vlans", "vlans.json")
 WAN_CONFIG_FILE = os.path.join(BASE_DIR, "config", "wan", "wan.json")
 
+# Alias helpers para compatibilidad
+_load_firewall_config = lambda: load_json_config(FIREWALL_CONFIG_FILE, {"vlans": {}, "status": 0})
+_load_vlans_config = lambda: load_json_config(VLANS_CONFIG_FILE, {"vlans": [], "status": 0})
+_load_wan_config = lambda: load_json_config(WAN_CONFIG_FILE)
+_save_firewall_config = lambda data: save_json_config(FIREWALL_CONFIG_FILE, data)
+_run_command = lambda cmd: run_command(cmd)
 
-# =============================================================================
-# UTILIDADES BÁSICAS
-# =============================================================================
 
 def _ensure_dirs():
     """Crear directorios necesarios para configuración y logs."""
@@ -36,101 +40,12 @@ def _ensure_dirs():
     create_module_config_directory("firewall")
 
 
-def _sanitize_interface_name(name: str) -> bool:
-    """Valida que el nombre de interfaz sea seguro (solo alfanuméricos, puntos, guiones, guiones bajos)."""
-    if not name or not isinstance(name, str):
-        return False
-    return bool(re.match(r'^[a-zA-Z0-9._-]+$', name))
-
-
-def _load_vlans_config() -> dict:
-    """Cargar configuración de VLANs desde vlans.json."""
-    if not os.path.exists(VLANS_CONFIG_FILE):
-        return {"vlans": [], "status": 0}
-    try:
-        with open(VLANS_CONFIG_FILE, "r") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Error cargando VLANs config: {e}")
-        return {"vlans": [], "status": 0}
-
-
-def _load_firewall_config() -> dict:
-    """Cargar configuración del firewall desde firewall.json."""
-    if not os.path.exists(FIREWALL_CONFIG_FILE):
-        return {"vlans": {}, "status": 0}
-    try:
-        with open(FIREWALL_CONFIG_FILE, "r") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Error cargando firewall config: {e}")
-        return {"vlans": {}, "status": 0}
-
-
-def _save_firewall_config(data: dict) -> None:
-    """Guardar configuración del firewall en firewall.json."""
-    _ensure_dirs()
-    try:
-        with open(FIREWALL_CONFIG_FILE, "w") as f:
-            # Lock exclusivo para prevenir race conditions
-            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
-            json.dump(data, f, indent=4)
-            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
-        logger.info("Configuración guardada correctamente")
-    except Exception as e:
-        logger.error(f"Error guardando configuración: {e}")
-
-
-def _load_wan_config() -> dict:
-    """Cargar configuración de WAN."""
-    if not os.path.exists(WAN_CONFIG_FILE):
-        return None
-    try:
-        with open(WAN_CONFIG_FILE, "r") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Error cargando WAN config: {e}")
-        return None
-
-
 def _check_wan_configured() -> bool:
     """Verificar si la WAN está configurada (tiene interfaz asignada)."""
     wan_cfg = _load_wan_config()
     if not wan_cfg:
         return False
     return bool(wan_cfg.get("interface"))
-
-
-def _run_command(cmd: list) -> Tuple[bool, str]:
-    """Ejecutar comando iptables con timeout y logging."""
-    cmd_str = " ".join(cmd)
-    logger.debug(f"Ejecutando: {cmd_str}")
-    
-    try:
-        full_cmd = ["/usr/bin/sudo", "-n"] + cmd
-        result = subprocess.run(
-            full_cmd,
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False
-        )
-        
-        if result.returncode == 0:
-            return True, result.stdout
-        else:
-            error_msg = result.stderr.strip() or "Comando falló sin mensaje de error"
-            logger.warning(f"Comando falló ({result.returncode}): {error_msg}")
-            return False, error_msg
-            
-    except subprocess.TimeoutExpired:
-        error_msg = f"Timeout ejecutando: {cmd_str}"
-        logger.error(error_msg)
-        return False, error_msg
-    except Exception as e:
-        error_msg = f"Error inesperado: {str(e)}"
-        logger.error(error_msg)
-        return False, error_msg
 
 
 # =============================================================================
@@ -1074,13 +989,12 @@ def enable_whitelist(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     if not params or "vlan_id" not in params:
         return False, "Error: vlan_id requerido"
     
-    try:
-        vlan_id = int(params["vlan_id"])
-    except (ValueError, TypeError):
-        return False, f"Error: vlan_id debe ser entero"
+    # Validar VLAN ID
+    valid, error = validate_vlan_id(params["vlan_id"])
+    if not valid:
+        return False, f"VLAN inválida: {error}"
     
-    if vlan_id < 1 or vlan_id > 4094:
-        return False, f"Error: vlan_id inválido"
+    vlan_id = int(params["vlan_id"])
     
     # VLANs 1 y 2 no permiten whitelist
     if vlan_id in (1, 2):
@@ -1093,6 +1007,12 @@ def enable_whitelist(params: Dict[str, Any] = None) -> Tuple[bool, str]:
         whitelist = [whitelist] if whitelist else []
     elif not isinstance(whitelist, list):
         return False, f"Error: whitelist debe ser una lista"
+    
+    # Validar cada IP en la whitelist
+    for ip in whitelist:
+        valid, error = validate_ip_address(ip)
+        if not valid:
+            return False, f"IP inválida '{ip}': {error}"
     
     fw_cfg = _load_firewall_config()
     
@@ -1191,12 +1111,19 @@ def add_rule(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     if not params or "vlan_id" not in params or "rule" not in params:
         return False, "Error: vlan_id y rule requeridos"
     
-    try:
-        vlan_id = int(params["vlan_id"])
-    except (ValueError, TypeError):
-        return False, f"Error: vlan_id debe ser entero"
+    # Validar VLAN ID
+    valid, error = validate_vlan_id(params["vlan_id"])
+    if not valid:
+        return False, f"VLAN inválida: {error}"
+    
+    vlan_id = int(params["vlan_id"])
     
     rule = params["rule"].strip()
+    
+    # Validar que la regla es una IP válida
+    valid, error = validate_ip_address(rule)
+    if not valid:
+        return False, f"Regla inválida '{rule}': {error}"
     
     fw_cfg = _load_firewall_config()
     

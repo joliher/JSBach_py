@@ -174,7 +174,7 @@ def create_venv(target_path):
     if result.returncode != 0:
         error(f"Fallo al crear el entorno virtual: {result.stderr.strip()}")
     # Instalar paquetes
-    result = subprocess.run(f"{venv_path}/bin/pip install fastapi[all] uvicorn", shell=True,
+    result = subprocess.run(f"{venv_path}/bin/pip install fastapi[all] uvicorn requests", shell=True,
                             stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
     if result.returncode != 0:
         error(f"Fallo al instalar paquetes en el entorno virtual: {result.stderr.strip()}")
@@ -427,6 +427,7 @@ if __name__ == "__main__":
         "/usr/bin/resolvectl *",
         "/usr/sbin/iptables *",
         "/usr/sbin/bridge *",
+        "/usr/sbin/ebtables *",
         "/usr/sbin/sysctl -w net.ipv4.ip_forward=1",
         "/usr/sbin/sysctl -w net.ipv4.ip_forward=0",
         "/usr/sbin/sysctl -n net.ipv4.ip_forward"

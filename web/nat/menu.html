@@ -64,6 +64,14 @@
             border-color: #ffc107;
             color: #856404;
         }
+        .dependency-warning {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 4px;
+            padding: 8px;
+            margin: 10px 0;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
@@ -71,7 +79,10 @@
 <h3>🔀 NAT</h3>
 
 <div class="status-box" id="module-status">Estado: Cargando...</div>
-
+<div class="dependency-warning">
+    <strong>⚠️ Dependencias requeridas:</strong><br>
+    <div id="dep-wan" style="margin: 3px 0;">🔄 WAN: Comprobando...</div>
+</div>
 <button type="button" id="btnStart"   onclick="runNat(event, 'start', this)">🚀 NAT START</button>
 <button type="button" id="btnStop"    onclick="runNat(event, 'stop', this)">🛑 NAT STOP</button>
 <button type="button" id="btnRestart" onclick="runNat(event, 'restart', this)">🔄 NAT RESTART</button>
@@ -199,6 +210,41 @@ function openInfo(event, btn) {
 
     iframe.location.href = "/web/nat/info.html";
 }
+
+async function checkDependencies() {
+    // Verificar WAN
+    const btnStart = document.getElementById('btnStart');
+    try {
+        const wanResp = await fetch('/admin/wan/info', { credentials: 'include' });
+        const wanData = await wanResp.json();
+        const wanDiv = document.getElementById('dep-wan');
+        if (wanData.status === 1) {
+            wanDiv.innerHTML = '✅ WAN: Activo';
+            wanDiv.style.color = '#155724';
+            // Habilitar botón START
+            btnStart.disabled = false;
+            btnStart.title = '';
+        } else {
+            wanDiv.innerHTML = '❌ WAN: Inactivo (Requerido)';
+            wanDiv.style.color = '#721c24';
+            // Deshabilitar botón START
+            btnStart.disabled = true;
+            btnStart.title = 'WAN debe estar activo primero';
+        }
+    } catch {
+        document.getElementById('dep-wan').innerHTML = '⚠️ WAN: Error al verificar';
+        // Deshabilitar botón START por error
+        btnStart.disabled = true;
+        btnStart.title = 'Error al verificar dependencias';
+    }
+}
+
+// Verificar dependencias al cargar
+window.addEventListener("DOMContentLoaded", () => {
+    checkDependencies();
+    // Actualizar dependencias cada 5 segundos
+    setInterval(checkDependencies, 5000);
+});
 </script>
 
 </body>

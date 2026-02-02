@@ -64,6 +64,15 @@
             border-color: #ffc107;
             color: #856404;
         }
+        .dependency-warning {
+            background: #fff3cd;
+            border: 2px solid #ffc107;
+            border-radius: 6px;
+            padding: 10px 12px;
+            margin: 10px 0;
+            font-size: 12px;
+            color: #856404;
+        }
         button:disabled {
             opacity: 0.5;
             cursor: not-allowed;
@@ -72,16 +81,6 @@
         button:disabled:hover {
             background-color: #e9ecef;
         }
-        .dependency-warning {
-            background: #fff3cd;
-            border: 2px solid #ffc107;
-            border-radius: 6px;
-            padding: 8px 10px;
-            margin: 10px 0;
-            font-size: 12px;
-            color: #856404;
-            display: none;
-        }
     </style>
 </head>
 <body>
@@ -89,9 +88,9 @@
 <h3>📡 DMZ</h3>
 
 <div class="status-box" id="module-status">Estado: Cargando...</div>
-
-<div class="dependency-warning" id="wan-warning">
-    ⚠️ La WAN debe estar configurada antes de iniciar la DMZ
+<div class="dependency-warning">
+    <strong>⚠️ Dependencias requeridas:</strong><br>
+    <div id="dep-nat" style="margin: 3px 0;">🔄 NAT: Comprobando...</div>
 </div>
 
 <!-- Acciones principales -->
@@ -171,7 +170,6 @@ window.onload = function() {
 };
 
 // Variables para polling adaptativo
-let wanConfigured = false;
 let lastStatus = null;
 let unchangedCount = 0;
 let pollInterval = 2000;
@@ -182,24 +180,6 @@ function fetchModuleStatus() {
         .then(response => response.json())
         .then(data => {
             const status = data['dmz'] || 'DESCONOCIDO';
-            const wanStatus = data['wan'] || 'DESCONOCIDO';
-            
-            // Verificar si WAN está configurada
-            wanConfigured = (wanStatus !== 'DESCONOCIDO' && wanStatus !== 'ERROR');
-            
-            // Deshabilitar botón START si WAN no está configurada
-            const btnStart = document.getElementById('btnStart');
-            const wanWarning = document.getElementById('wan-warning');
-            
-            if (!wanConfigured) {
-                btnStart.disabled = true;
-                btnStart.title = 'La WAN debe estar configurada primero';
-                wanWarning.style.display = 'block';
-            } else {
-                btnStart.disabled = false;
-                btnStart.title = '';
-                wanWarning.style.display = 'none';
-            }
             
             // Actualizar UI de estado con polling adaptativo
             if (status === lastStatus) {
@@ -237,6 +217,41 @@ function fetchModuleStatus() {
             statusTimerId = setTimeout(fetchModuleStatus, 5000); // Retry en 5s
         });
 }
+
+async function checkDependencies() {
+    // Verificar NAT
+    const btnStart = document.getElementById('btnStart');
+    try {
+        const natResp = await fetch('/admin/nat/info', { credentials: 'include' });
+        const natData = await natResp.json();
+        const natDiv = document.getElementById('dep-nat');
+        if (natData.status === 1) {
+            natDiv.innerHTML = '✅ NAT: Activo';
+            natDiv.style.color = '#155724';
+            // Habilitar botón START
+            btnStart.disabled = false;
+            btnStart.title = '';
+        } else {
+            natDiv.innerHTML = '❌ NAT: Inactivo (Requerido)';
+            natDiv.style.color = '#721c24';
+            // Deshabilitar botón START
+            btnStart.disabled = true;
+            btnStart.title = 'NAT debe estar activo primero';
+        }
+    } catch {
+        document.getElementById('dep-nat').innerHTML = '⚠️ NAT: Error al verificar';
+        // Deshabilitar botón START por error
+        btnStart.disabled = true;
+        btnStart.title = 'Error al verificar dependencias';
+    }
+}
+
+// Verificar dependencias al cargar
+window.addEventListener("DOMContentLoaded", () => {
+    checkDependencies();
+    // Actualizar dependencias cada 5 segundos
+    setInterval(checkDependencies, 5000);
+});
 </script>
 
 </body>

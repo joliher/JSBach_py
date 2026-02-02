@@ -64,6 +64,14 @@
             border-color: #ffc107;
             color: #856404;
         }
+        .dependency-warning {
+            background: #fff3cd;
+            border: 1px solid #ffc107;
+            border-radius: 4px;
+            padding: 8px;
+            margin: 10px 0;
+            font-size: 12px;
+        }
     </style>
 </head>
 <body>
@@ -71,6 +79,11 @@
 <h3>🏷️ TAGGING</h3>
 
 <div class="status-box" id="module-status">Estado: Cargando...</div>
+
+<div class="dependency-warning">
+    <strong>⚠️ Dependencias requeridas:</strong><br>
+    <div id="dep-vlans" style="margin: 3px 0;">🔄 VLANs: Comprobando...</div>
+</div>
 
 <button type="button" id="btnStart"   onclick="runTagging(event, 'start', this)">🚀 TAGGING START</button>
 <button type="button" id="btnStop"    onclick="runTagging(event, 'stop', this)">🛑 TAGGING STOP</button>
@@ -199,6 +212,41 @@ function openInfo(event, btn) {
 
     iframe.location.href = "/web/tagging/info.html";
 }
+
+async function checkDependencies() {
+    // Verificar VLANs
+    const btnStart = document.getElementById('btnStart');
+    try {
+        const vlansResp = await fetch('/admin/vlans/info', { credentials: 'include' });
+        const vlansData = await vlansResp.json();
+        const vlansDiv = document.getElementById('dep-vlans');
+        if (vlansData.status === 1) {
+            vlansDiv.innerHTML = '✅ VLANs: Activo';
+            vlansDiv.style.color = '#155724';
+            // Habilitar botón START
+            btnStart.disabled = false;
+            btnStart.title = '';
+        } else {
+            vlansDiv.innerHTML = '❌ VLANs: Inactivo (Requerido)';
+            vlansDiv.style.color = '#721c24';
+            // Deshabilitar botón START
+            btnStart.disabled = true;
+            btnStart.title = 'VLANs debe estar activo primero';
+        }
+    } catch {
+        document.getElementById('dep-vlans').innerHTML = '⚠️ VLANs: Error al verificar';
+        // Deshabilitar botón START por error
+        btnStart.disabled = true;
+        btnStart.title = 'Error al verificar dependencias';
+    }
+}
+
+// Verificar dependencias al cargar
+window.addEventListener("DOMContentLoaded", () => {
+    checkDependencies();
+    // Actualizar dependencias cada 5 segundos
+    setInterval(checkDependencies, 5000);
+});
 </script>
 
 </body>

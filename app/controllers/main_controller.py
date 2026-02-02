@@ -10,6 +10,7 @@ PUBLIC_PATHS = ["/login", "/"]
 
 def setup_app(app):
     """Configure routes, middleware and startup events on the given FastAPI app."""
+    
     # Startup event: clear logs
     @app.on_event("startup")
     async def startup_event():
@@ -25,6 +26,10 @@ def setup_app(app):
         if "user" in request.session:
             return await call_next(request)
         return RedirectResponse("/login")
+    
+    # Register routers
+    from app.controllers import admin_router
+    app.include_router(admin_router.router)
 
     # Static web file serving route
     @app.get("/web/{full_path:path}")
@@ -83,6 +88,3 @@ def setup_app(app):
         if "user" not in request.session:
             return RedirectResponse("/login")
         return RedirectResponse("/web/index.html")
-
-    from app.controllers import admin_router
-    app.include_router(admin_router.router)
