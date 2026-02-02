@@ -225,18 +225,18 @@ def test_dmz_cli():
     """Probar DMZ vía CLI"""
     print_section("PRUEBAS DMZ - CLI")
     
-    # 1. Configurar destino DMZ
-    print("\n  1. Configurar destino DMZ (192.168.3.10:80/tcp)...")
-    cmd = 'dmz config {"ip": "192.168.3.10", "port": 80, "protocol": "tcp"}'
+    # 1. Configurar destino DMZ (usando IP en rango de VLAN 10: 192.168.10.0/24, puerto 9001)
+    print("\n  1. Configurar destino DMZ (192.168.10.10:9001/tcp)...")
+    cmd = 'dmz config {"ip": "192.168.10.10", "port": 9001, "protocol": "tcp"}'
     response = send_cli_command(cmd)
     success = ("éxito" in response.lower() or "añadido" in response.lower() or 
                "ya existe" in response.lower())  # Aceptar si ya existe
     print_test("Config DMZ destino 1", success, response[:100])
     count_test(success)
     
-    # 2. Configurar segundo destino
-    print("\n  2. Configurar destino DMZ (192.168.3.20:443/tcp)...")
-    cmd = 'dmz config {"ip": "192.168.3.20", "port": 443, "protocol": "tcp"}'
+    # 2. Configurar segundo destino (usando IP en rango de VLAN 20: 192.168.20.0/24, puerto 9002)
+    print("\n  2. Configurar destino DMZ (192.168.20.20:9002/tcp)...")
+    cmd = 'dmz config {"ip": "192.168.20.20", "port": 9002, "protocol": "tcp"}'
     response = send_cli_command(cmd)
     success = ("éxito" in response.lower() or "añadido" in response.lower() or 
                "ya existe" in response.lower())  # Aceptar si ya existe
@@ -258,18 +258,18 @@ def test_dmz_cli():
     print_test("Status DMZ", success, response[:200])
     count_test(success)
     
-    # 5. Aislar destino DMZ
-    print("\n  5. Aislar destino 192.168.3.10:80/tcp...")
-    cmd = 'dmz aislar {"ip": "192.168.3.10", "port": 80, "protocol": "tcp"}'
+    # 5. Aislar destino DMZ (usando IP válida en VLAN, puerto 9001)
+    print("\n  5. Aislar destino 192.168.10.10:9001/tcp...")
+    cmd = 'dmz aislar {"ip": "192.168.10.10", "port": 9001, "protocol": "tcp"}'
     response = send_cli_command(cmd)
     success = ("éxito" in response.lower() or "aislad" in response.lower() or 
                "ya estaba aislado" in response.lower())  # Aceptar si ya estaba aislado
     print_test("Aislar DMZ", success, response[:100])
     count_test(success)
     
-    # 6. Desaislar destino DMZ
-    print("\n  6. Desaislar destino 192.168.3.10:80/tcp...")
-    cmd = 'dmz desaislar {"ip": "192.168.3.10", "port": 80, "protocol": "tcp"}'
+    # 6. Desaislar destino DMZ (usando IP válida en VLAN, puerto 9001)
+    print("\n  6. Desaislar destino 192.168.10.10:9001/tcp...")
+    cmd = 'dmz desaislar {"ip": "192.168.10.10", "port": 9001, "protocol": "tcp"}'
     response = send_cli_command(cmd)
     success = ("éxito" in response.lower() or "desaislad" in response.lower() or 
                "no estaba aislado" in response.lower())  # Aceptar si no estaba aislado
@@ -391,9 +391,9 @@ def test_dmz_web():
     """Probar DMZ vía Web"""
     print_section("PRUEBAS DMZ - WEB API")
     
-    # 1. Configurar destino
+    # 1. Configurar destino (usando IP válida en VLAN 30: 192.168.30.0/24, puerto 9003)
     print("\n  1. Configurar destino DMZ vía Web...")
-    params = {"ip": "192.168.3.30", "port": 22, "protocol": "tcp"}
+    params = {"ip": "192.168.30.30", "port": 9003, "protocol": "tcp"}
     success, message = web_module_action("dmz", "config", params)
     # Aceptar tanto si se crea como si ya existe
     success = success or "ya existe" in message.lower()

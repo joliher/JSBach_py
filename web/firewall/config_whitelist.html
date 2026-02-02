@@ -515,6 +515,29 @@
                       '- :puerto/proto: :22/tcp');
                 return;
             }
+            
+            // Validar puertos (1-65535) si existen
+            const portMatch = rule.match(/:(\d+)/);
+            if (portMatch) {
+                const port = parseInt(portMatch[1]);
+                if (port < 1 || port > 65535) {
+                    alert(`❌ Puerto inválido: ${port}. Debe estar entre 1 y 65535`);
+                    return;
+                }
+            }
+            
+            // Validar IP si existe (octetos 0-255)
+            const ipMatch = rule.match(/^(\d{1,3}\.){3}(\d{1,3})/);
+            if (ipMatch) {
+                const octets = rule.split(/[:\/]/)[0].split('.');
+                for (let octet of octets) {
+                    const num = parseInt(octet);
+                    if (num > 255) {
+                        alert(`❌ IP inválida: octeto ${octet} > 255`);
+                        return;
+                    }
+                }
+            }
 
             console.log(`Adding rule "${rule}" to VLAN ${vlanId}`);
 

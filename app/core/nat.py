@@ -3,6 +3,8 @@
 import subprocess
 import json
 import os
+import fcntl
+import re
 from typing import Dict, Any, Tuple, Optional
 from ..utils.global_functions import create_module_config_directory, create_module_log_directory
 
@@ -23,7 +25,7 @@ def _run_command(cmd: list) -> Tuple[bool, str]:
             full_cmd,
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=30,
             check=False
         )
         
@@ -52,13 +54,23 @@ def _load_config() -> Optional[dict]:
 def _save_config(config: dict) -> None:
     os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
     with open(CONFIG_FILE, "w") as f:
+        # Lock exclusivo para prevenir race conditions
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
         json.dump(config, f, indent=4)
+        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
 
 def _update_status(status: int) -> None:
     cfg = _load_config() or {"interface": "", "status": 0}
     cfg["status"] = status
     _save_config(cfg)
+
+
+def _sanitize_interface_name(name: str) -> bool:
+    """Valida que el nombre de interfaz sea seguro (solo alfanuméricos, puntos, guiones, guiones bajos)."""
+    if not name or not isinstance(name, str):
+        return False
+    return bool(re.match(r'^[a-zA-Z0-9._-]+$', name))
 
 
 # -----------------------------
@@ -75,6 +87,10 @@ def start(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     interfaz = config.get("interface")
     if not interfaz:
         return False, "Interfaz NAT no definida"
+    
+    # Validar nombre de interfaz seguro
+    if not _sanitize_interface_name(interfaz):
+        return False, f"Nombre de interfaz inválido: '{interfaz}'. Solo use caracteres alfanuméricos, puntos, guiones y guiones bajos."
 
     # Comprobar si NAT ya está activo
     cmd = ["/usr/sbin/iptables", "-t", "nat", "-C", "POSTROUTING", "-o", interfaz, "-j", "MASQUERADE"]
@@ -160,21 +176,40 @@ def status(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     if not interfaz:
         return False, "Interfaz NAT no definida"
 
+    # Verificar si la interfaz existe y está UP
+    success, ip_info = _run_command(["/usr/sbin/ip", "a", "show", interfaz])
+    if not success:
+        return False, f"La interfaz {interfaz} no existe"
+    
+    is_up = "state UP" in ip_info or ",UP," in ip_info
+    interface_status = "🟢 UP" if is_up else "🔴 DOWN"
+
     # Verificar IP forwarding
     success, output = _run_command(["/usr/sbin/sysctl", "-n", "net.ipv4.ip_forward"])
     if not success:
         return False, f"Error verificando NAT: {output}"
     
     ip_forward = output.strip()
+    forwarding_status = "✅ Activado" if ip_forward == "1" else "❌ Desactivado"
     
     # Verificar regla NAT
     cmd = ["/usr/sbin/iptables", "-t", "nat", "-C", "POSTROUTING", "-o", interfaz, "-j", "MASQUERADE"]
     nat_active, _ = _run_command(cmd)
+    nat_rule_status = "✅ Configurada" if nat_active else "❌ No configurada"
     
-    if ip_forward == "1" and nat_active:
-        return True, f"NAT ACTIVADO en {interfaz}"
-    else:
-        return True, f"NAT DESACTIVADO en {interfaz}"
+    overall_status = "🟢 ACTIVO" if (ip_forward == "1" and nat_active and is_up) else "🔴 INACTIVO"
+    
+    status_summary = f"""Estado de NAT:
+==================
+Estado general: {overall_status}
+Interfaz: {interfaz} [{interface_status}]
+IP Forwarding: {forwarding_status}
+Regla MASQUERADE: {nat_rule_status}"""
+
+    if not is_up:
+        status_summary += f"\n\n⚠️ ADVERTENCIA: La interfaz {interfaz} está DOWN (inactiva)"
+    
+    return True, status_summary
 
 
 def config(params: Dict[str, Any]) -> Tuple[bool, str]:

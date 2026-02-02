@@ -98,13 +98,14 @@
 <button id="btnStart" onclick="executeAction('start', this)">🚀 DMZ START</button>
 <button id="btnStop" onclick="executeAction('stop', this)">🛑 DMZ STOP</button>
 <button id="btnRestart" onclick="executeAction('restart', this)">🔄 DMZ RESTART</button>
-<button id="btnStatus" onclick="openPage('status', this)">📊 DMZ STATUS</button>
+<button id="btnStatus" onclick="executeAction('status', this)">📊 DMZ STATUS</button>
 
 <hr>
 
-<h4 style="margin: 10px 0; color: #555;">Configuración</h4>
+<h4 style="margin: 10px 0; color: #555;">Configuración y Vista</h4>
 
 <button id="btnConfig" onclick="openPage('config', this)">⚙️ DMZ CONFIG</button>
+<button id="btnDestinations" onclick="openPage('destinations', this)">📋 VER DESTINOS</button>
 
 <hr>
 
@@ -130,8 +131,13 @@ function executeAction(action, btn) {
     btn.classList.add("selected");
     sessionStorage.setItem("dmzSelected", btn.id);
     
-    // Cargar logs.html para todas las acciones
-    iframe.location.href = "/web/dmz/logs.html";
+    // START/STOP/RESTART/STATUS → cargar status.html para feedback
+    if (action === 'start' || action === 'stop' || action === 'restart' || action === 'status') {
+        iframe.location.href = "/web/dmz/status.html";
+    } else {
+        // Otras acciones → mostrar info.html
+        iframe.location.href = "/web/dmz/info.html";
+    }
     
     // Ejecutar acción en segundo plano
     console.log('DMZ: Iniciando fetch a /admin/dmz con action:', action);

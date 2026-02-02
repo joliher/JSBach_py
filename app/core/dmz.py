@@ -7,6 +7,8 @@ import json
 import os
 import logging
 import ipaddress
+import fcntl
+import re
 from typing import Dict, Any, Tuple, Optional, List
 from ..utils.global_functions import create_module_config_directory, create_module_log_directory
 
@@ -59,6 +61,13 @@ def _ensure_dirs():
     os.makedirs(os.path.join(BASE_DIR, "logs", "dmz"), exist_ok=True)
 
 
+def _sanitize_interface_name(name: str) -> bool:
+    """Valida que el nombre de interfaz sea seguro (solo alfanuméricos, puntos, guiones, guiones bajos)."""
+    if not name or not isinstance(name, str):
+        return False
+    return bool(re.match(r'^[a-zA-Z0-9._-]+$', name))
+
+
 def _write_log(message: str):
     """Escribir mensaje en el archivo de log."""
     from datetime import datetime
@@ -103,7 +112,10 @@ def _save_config(data: dict) -> None:
     _ensure_dirs()
     try:
         with open(CONFIG_FILE, "w") as f:
+            # Lock exclusivo para prevenir race conditions
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
             json.dump(data, f, indent=4)
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
         logger.info("Configuración DMZ guardada correctamente")
     except Exception as e:
         logger.error(f"Error guardando configuración DMZ: {e}")
@@ -146,14 +158,36 @@ def _load_vlans_config() -> Optional[dict]:
 
 
 def _get_vlan_from_ip(ip: str) -> Optional[int]:
-    """Extraer ID de VLAN desde IP (10.0.X.0/24 → X)."""
+    """Determinar VLAN ID desde IP: busca en qué rango de VLAN cae la IP."""
     try:
         ip_obj = ipaddress.ip_address(ip)
+        
+        # Cargar configuración de VLANs
+        vlans_cfg = _load_vlans_config()
+        if not vlans_cfg:
+            return None
+        
+        vlans = vlans_cfg.get("vlans", [])
+        
+        # Buscar en qué VLAN está esta IP
+        for vlan in vlans:
+            vlan_network_str = vlan.get("ip_network", "")
+            if vlan_network_str:
+                try:
+                    vlan_network = ipaddress.ip_network(vlan_network_str, strict=False)
+                    if ip_obj in vlan_network:
+                        return vlan.get("id")
+                except ValueError:
+                    continue
+        
+        # Fallback a método antiguo (10.0.X.Y → X) para backward compatibility
         octets = str(ip_obj).split('.')
         if octets[0] == '10' and octets[1] == '0':
             return int(octets[2])
+            
     except Exception as e:
-        logger.error(f"Error extrayendo VLAN desde IP {ip}: {e}")
+        logger.error(f"Error determinando VLAN desde IP {ip}: {e}")
+    
     return None
 
 
@@ -414,7 +448,13 @@ def _validate_destination(ip: str, port: int, protocol: str) -> Tuple[bool, str]
     # Validar que el host esté en una VLAN configurada
     vlan_id = _get_vlan_from_ip(ip)
     if vlan_id is None:
-        return False, f"IP {ip} no tiene formato 10.0.X.Y (no se puede determinar VLAN)"
+        vlans_cfg = _load_vlans_config()
+        vlans = vlans_cfg.get("vlans", []) if vlans_cfg else []
+        if vlans:
+            vlan_networks = ", ".join([v.get("ip_network", "N/A") for v in vlans])
+            return False, f"IP {ip} no está en ninguna VLAN configurada. VLANs disponibles: {vlan_networks}"
+        else:
+            return False, f"IP {ip} no está en ninguna VLAN. Configure VLANs primero."
     
     # Verificar que la VLAN existe en vlans.json y la IP está en su rango
     vlans_cfg = _load_vlans_config()
@@ -906,6 +946,14 @@ def update_destination(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     dmz_cfg = _load_config()
     destinations = dmz_cfg.get("destinations", [])
     
+    # Verificar que el nuevo puerto no esté en uso por otro destino
+    for dest in destinations:
+        # Si es un destino diferente (no el que estamos actualizando)
+        if not (dest["ip"] == old_ip and dest["port"] == old_port and dest["protocol"] == old_protocol):
+            # Y usa el mismo puerto/protocolo
+            if dest["port"] == new_port and dest["protocol"] == new_protocol:
+                return False, f"Error: El puerto {new_port}/{new_protocol} ya está en uso por {dest['ip']}. Cada puerto solo puede redirigirse a un único destino."
+    
     found = False
     for dest in destinations:
         if dest["ip"] == old_ip and dest["port"] == old_port and dest["protocol"] == old_protocol:
@@ -950,7 +998,13 @@ def isolate_dmz_host(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     # Validar que la IP es válida y pertenece a una VLAN configurada
     vlan_id = _get_vlan_from_ip(ip)
     if not vlan_id:
-        return False, f"IP {ip} no tiene formato válido 10.0.X.Y"
+        vlans_cfg = _load_vlans_config()
+        vlans = vlans_cfg.get("vlans", []) if vlans_cfg else []
+        if vlans:
+            vlan_networks = ", ".join([v.get("ip_network", "N/A") for v in vlans])
+            return False, f"IP {ip} no está en ninguna VLAN configurada. VLANs disponibles: {vlan_networks}"
+        else:
+            return False, f"IP {ip} no está en ninguna VLAN. Configure VLANs primero."
     
     vlans_cfg = _load_vlans_config()
     if not vlans_cfg:

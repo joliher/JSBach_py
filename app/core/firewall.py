@@ -6,6 +6,8 @@ import subprocess
 import json
 import os
 import logging
+import fcntl
+import re
 from typing import Dict, Any, Tuple, List
 from ..utils.global_functions import (
     create_module_config_directory,
@@ -32,6 +34,13 @@ def _ensure_dirs():
     os.makedirs(os.path.dirname(FIREWALL_CONFIG_FILE), exist_ok=True)
     create_module_log_directory("firewall")
     create_module_config_directory("firewall")
+
+
+def _sanitize_interface_name(name: str) -> bool:
+    """Valida que el nombre de interfaz sea seguro (solo alfanuméricos, puntos, guiones, guiones bajos)."""
+    if not name or not isinstance(name, str):
+        return False
+    return bool(re.match(r'^[a-zA-Z0-9._-]+$', name))
 
 
 def _load_vlans_config() -> dict:
@@ -63,7 +72,10 @@ def _save_firewall_config(data: dict) -> None:
     _ensure_dirs()
     try:
         with open(FIREWALL_CONFIG_FILE, "w") as f:
+            # Lock exclusivo para prevenir race conditions
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
             json.dump(data, f, indent=4)
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
         logger.info("Configuración guardada correctamente")
     except Exception as e:
         logger.error(f"Error guardando configuración: {e}")
@@ -152,9 +164,10 @@ def _ensure_input_protection_chain():
             lines = output.strip().split('\n')
             for line in lines:
                 if 'INPUT_PROTECTION' in line:
-                    parts = line.split()
-                    if parts and parts[0].isdigit():
-                        position = int(parts[0])
+                    # Usar regex para extraer número de posición (más robusto)
+                    match = re.match(r'^(\d+)\s+', line)
+                    if match:
+                        position = int(match.group(1))
                         if position != 1:
                             logger.warning(f"INPUT_PROTECTION en posición {position}, reposicionando a 1")
                             _run_command(["/usr/sbin/iptables", "-D", "INPUT", "-j", "INPUT_PROTECTION"])
@@ -190,9 +203,10 @@ def _ensure_forward_protection_chain():
             lines = output.strip().split('\n')
             for line in lines:
                 if 'FORWARD_PROTECTION' in line:
-                    parts = line.split()
-                    if parts and parts[0].isdigit():
-                        position = int(parts[0])
+                    # Usar regex para extraer número de posición (más robusto)
+                    match = re.match(r'^(\d+)\s+', line)
+                    if match:
+                        position = int(match.group(1))
                         if position != 1:
                             logger.warning(f"FORWARD_PROTECTION en posición {position}, reposicionando a 1")
                             _run_command(["/usr/sbin/iptables", "-D", "FORWARD", "-j", "FORWARD_PROTECTION"])
@@ -358,14 +372,15 @@ def _apply_whitelist(vlan_id: int, whitelist: List[str]) -> Tuple[bool, str]:
     success, output = _run_command(["/usr/sbin/iptables", "-L", chain_name, "-n", "--line-numbers"])
     if success:
         for line in output.split('\n'):
-            # Buscar reglas ACCEPT con destino específico
+            # Buscar reglas ACCEPT con destino específico usando regex
             if 'ACCEPT' in line:
-                parts = line.split()
-                # Verificar suficientes campos y destino no es 0.0.0.0/0
-                if len(parts) >= 6 and parts[5] != '0.0.0.0/0':
-                    dest_ip = parts[5]
-                    # Solo preservar si está en dmz_ips
-                    if dest_ip in dmz_ips:
+                # Usar regex para extraer IP destino (más robusto que posiciones)
+                # Patrón: buscar "ACCEPT" seguido de destino IP (no 0.0.0.0/0)
+                match = re.search(r'\s+([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(?:/\d+)?)\s+', line)
+                if match:
+                    dest_ip = match.group(1)
+                    # Solo preservar si no es 0.0.0.0/0 y está en dmz_ips
+                    if dest_ip != '0.0.0.0/0' and dest_ip in dmz_ips:
                         dmz_rules.append(dest_ip)
                         logger.info(f"Preservando regla DMZ ACCEPT para {dest_ip}")
     
@@ -1141,14 +1156,15 @@ def disable_whitelist(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     success, output = _run_command(["/usr/sbin/iptables", "-L", chain_name, "-n", "--line-numbers"])
     if success:
         for line in output.split('\n'):
-            # Buscar reglas ACCEPT con destino específico
+            # Buscar reglas ACCEPT con destino específico usando regex
             if 'ACCEPT' in line:
-                parts = line.split()
-                # Verificar que tiene suficientes campos y el destino no es 0.0.0.0/0
-                if len(parts) >= 6 and parts[5] != '0.0.0.0/0':
-                    dest_ip = parts[5]
-                    # Solo preservar si está en dmz_ips
-                    if dest_ip in dmz_ips:
+                # Usar regex para extraer IP destino (más robusto que posiciones)
+                # Patrón: buscar IP con CIDR (no 0.0.0.0/0)
+                match = re.search(r'\s+([0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}(?:/\d+)?)\s+', line)
+                if match:
+                    dest_ip = match.group(1)
+                    # Solo preservar si no es 0.0.0.0/0 y está en dmz_ips
+                    if dest_ip != '0.0.0.0/0' and dest_ip in dmz_ips:
                         dmz_rules.append(dest_ip)
                         logger.info(f"Preservando regla DMZ ACCEPT para {dest_ip}")
     

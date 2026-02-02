@@ -122,28 +122,33 @@ async function runAction(action, btn) {
     btn.classList.add("selected");
     sessionStorage.setItem("firewallSelected", btn.id);
 
-    // Cargar logs.html para todas las acciones
-    iframe.location.href = "/web/firewall/logs.html";
+    // Para start/stop/restart/status, redirigir a status.html para feedback
+    if (action === 'start' || action === 'stop' || action === 'restart' || action === 'status') {
+        iframe.location.href = "/web/firewall/status.html";
+        // Ejecutar acción en segundo plano
+        console.log('Iniciando fetch a /admin/firewall con action:', action);
+        
+        fetch('/admin/firewall', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: action }),
+            credentials: 'include'
+        })
+        .then(response => {
+            console.log('Respuesta recibida:', response.status, response.statusText);
+            return response.json();
+        })
+        .then(data => {
+            console.log('Datos recibidos:', data);
+        })
+        .catch(error => {
+            console.error("Error al ejecutar la acción:", error);
+        });
+        return;
+    }
 
-    // Ejecutar acción en segundo plano (incluido status)
-    console.log('Iniciando fetch a /admin/firewall con action:', action);
-    
-    fetch('/admin/firewall', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: action }),
-        credentials: 'include'
-    })
-    .then(response => {
-        console.log('Respuesta recibida:', response.status, response.statusText);
-        return response.json();
-    })
-    .then(data => {
-        console.log('Datos recibidos:', data);
-    })
-    .catch(error => {
-        console.error("Error al ejecutar la acción:", error);
-    });
+    // Otras acciones
+    iframe.location.href = "/web/firewall/info.html";
 }
 
 function openConfig(section, btn) {

@@ -3,6 +3,8 @@
 import subprocess
 import json
 import os
+import fcntl
+import re
 from typing import Dict, Any, Tuple, Optional
 from ..utils.global_functions import create_module_config_directory, create_module_log_directory
 
@@ -60,13 +62,23 @@ def _load_config() -> dict:
 def _save_config(data: dict) -> None:
     os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
     with open(CONFIG_FILE, "w") as f:
+        # Lock exclusivo para prevenir race conditions
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
         json.dump(data, f, indent=4)
+        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
 
 def _update_status(status: int) -> None:
     cfg = _load_config()
     cfg["status"] = status
     _save_config(cfg)
+
+
+def _sanitize_interface_name(name: str) -> bool:
+    """Valida que el nombre de interfaz sea seguro (solo alfanuméricos, puntos, guiones, guiones bajos)."""
+    if not name or not isinstance(name, str):
+        return False
+    return bool(re.match(r'^[a-zA-Z0-9._-]+$', name))
 
 
 def _bridge_exists() -> bool:
@@ -130,6 +142,19 @@ def stop(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     create_module_config_directory("vlans")
     create_module_log_directory("vlans")
     
+    # Cargar configuración para obtener las VLANs
+    cfg = _load_config()
+    vlans = cfg.get("vlans", [])
+    
+    # Eliminar subinterfaces VLAN primero
+    for vlan in vlans:
+        vlan_id = str(vlan.get("id"))
+        iface_name = f"br0.{vlan_id}"
+        # Intentar eliminar (puede no existir si ya fue eliminada)
+        _run_cmd(["/usr/sbin/ip", "link", "set", iface_name, "down"], ignore_error=True)
+        _run_cmd(["/usr/sbin/ip", "link", "del", "dev", iface_name], ignore_error=True)
+    
+    # Luego eliminar bridge
     if _bridge_exists():
         if not _run_cmd(["/usr/sbin/ip", "link", "set", "br0", "down"], ignore_error=True):
             return False, "Error deteniendo bridge br0"
@@ -153,36 +178,55 @@ def status(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     _initialize_default_vlans()
     
     cfg = _load_config()
-    active = cfg.get("status", 0) == 1
-    
-    status_msg = "VLANs ACTIVO" if active else "VLANs INACTIVO"
-    
-    # Mostrar VLANs configuradas
-    vlans_info = "\nVLANs CONFIGURADAS:\n"
     vlans = cfg.get("vlans", [])
+    
+    # Verificar si el bridge br0 existe y está UP
+    success, br0_info = _run_command(["/usr/sbin/ip", "a", "show", "br0"])
+    br0_exists = success
+    br0_is_up = "state UP" in br0_info if success else False
+    
+    status_lines = ["Estado de VLANs:", "=" * 50]
+    
+    if not br0_exists:
+        status_lines.append("🔴 Bridge br0: NO EXISTE")
+        status_lines.append("\n⚠️ Las VLANs requieren que el bridge br0 esté creado")
+        return True, "\n".join(status_lines)
+    
+    br0_status = "🟢 UP" if br0_is_up else "🔴 DOWN"
+    status_lines.append(f"Bridge br0: {br0_status}")
+    
+    # Verificar cada VLAN configurada
+    status_lines.append(f"\nVLANs configuradas: {len(vlans)}")
+    status_lines.append("-" * 50)
+    
     if vlans:
         for vlan in vlans:
+            vlan_id = vlan.get('id')
+            vlan_name = vlan.get('name', 'Sin nombre')
             ip_int = vlan.get('ip_interface', 'N/A')
             ip_net = vlan.get('ip_network', 'N/A')
-            vlans_info += f"  VLAN {vlan.get('id')}: {vlan.get('name')} - Interfaz: {ip_int}, Red: {ip_net}\n"
+            
+            # Verificar si la subinterfaz br0.X existe y está UP
+            subif_name = f"br0.{vlan_id}"
+            success, subif_info = _run_command(["/usr/sbin/ip", "a", "show", subif_name])
+            
+            if success:
+                is_up = "state UP" in subif_info
+                has_ip = f"inet {ip_int.split('/')[0]}" in subif_info if '/' in ip_int else False
+                subif_status = "🟢 UP" if is_up else "🔴 DOWN"
+                ip_status = " ✅" if has_ip else " ⚠️ Sin IP"
+            else:
+                subif_status = "❌ NO EXISTE"
+                ip_status = ""
+            
+            status_lines.append(f"\nVLAN {vlan_id} ({vlan_name}):")
+            status_lines.append(f"  Interfaz: {subif_name} [{subif_status}]{ip_status}")
+            status_lines.append(f"  IP: {ip_int}")
+            status_lines.append(f"  Red: {ip_net}")
     else:
-        vlans_info += "  (sin VLANs)\n"
+        status_lines.append("\n(Sin VLANs configuradas)")
     
-    # Mostrar estado de interfaces VLAN
-    vlans_info += "\nINTERFACES VLAN:\n"
-    try:
-        result = subprocess.run(
-            ["sudo", "ip", "-br", "addr", "show", "type", "vlan"],
-            capture_output=True,
-            text=True,
-            check=True
-        )
-        if result.stdout.strip():
-            vlans_info += result.stdout.rstrip()
-        else:
-            vlans_info += "(sin datos)"
-    except subprocess.CalledProcessError:
-        vlans_info += "Error obteniendo estado de VLANs"
+    return True, "\n".join(status_lines)
     
     return True, f"{status_msg}{vlans_info}"
 

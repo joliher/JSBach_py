@@ -231,6 +231,32 @@
 <script>
 let taggingCache = {};
 
+function isValidInterfaceName(name) {
+    // Valida que sea alfanumérico, guiones, puntos y barras bajas
+    return /^[a-zA-Z0-9._-]+$/.test(name);
+}
+
+function isValidVLANId(id) {
+    const num = parseInt(id);
+    return !isNaN(num) && num >= 1 && num <= 4094;
+}
+
+function validateVLANList(vlanList) {
+    // Valida una lista de VLANs separadas por comas
+    if (!vlanList) return { valid: true, errors: [] };
+    
+    const ids = vlanList.split(',').map(v => v.trim()).filter(v => v);
+    const errors = [];
+    
+    ids.forEach(id => {
+        if (!isValidVLANId(id)) {
+            errors.push(`${id} no es un ID de VLAN válido (1-4094)`);
+        }
+    });
+    
+    return { valid: errors.length === 0, errors };
+}
+
 async function loadTagging() {
     try {
         const response = await fetch("/admin/tagging", {
@@ -246,7 +272,7 @@ async function loadTagging() {
         const data = await response.json();
         
         if (!response.ok) {
-            document.getElementById("output").textContent = data.detail || "Error cargando interfaces";
+            document.getElementById("output").textContent = "❌ " + (data.detail || "Error cargando interfaces");
             return;
         }
 
@@ -327,9 +353,33 @@ async function saveRow(name) {
     const tr = document.querySelector(`tr[data-name="${name}"]`);
     const inputs = tr.querySelectorAll("input");
     let [vlan_untag, vlan_tag] = Array.from(inputs).map(i => i.value.trim());
+    const output = document.getElementById("output");
 
     vlan_untag = vlan_untag === "" ? "" : vlan_untag;
     vlan_tag = vlan_tag === "" ? "" : vlan_tag;
+
+    // Validar VLAN Untag si se proporciona
+    if (vlan_untag) {
+        if (!isValidVLANId(vlan_untag)) {
+            output.textContent = `❌ Error: VLAN Untag ${vlan_untag} no es válida. Debe estar entre 1 y 4094.`;
+            return;
+        }
+    }
+
+    // Validar VLAN Tag si se proporciona
+    if (vlan_tag) {
+        const validation = validateVLANList(vlan_tag);
+        if (!validation.valid) {
+            output.textContent = `❌ Error en VLAN Tag: ${validation.errors.join(", ")}`;
+            return;
+        }
+    }
+
+    // Al menos una VLAN debe estar configurada
+    if (!vlan_untag && !vlan_tag) {
+        output.textContent = "❌ Error: Debe configurar al menos VLAN Untag o VLAN Tag";
+        return;
+    }
 
     try {
         const response = await fetch("/admin/tagging", {
@@ -348,11 +398,17 @@ async function saveRow(name) {
         });
 
         const data = await response.json();
-        document.getElementById("output").textContent = data.message || data.detail;
+        
+        if (!response.ok) {
+            output.textContent = "❌ " + (data.detail || data.message || "Error desconocido");
+            return;
+        }
+
+        output.textContent = "✅ " + (data.message || "Interfaz guardada exitosamente");
         loadTagging();
 
     } catch (err) {
-        document.getElementById("output").textContent = "Error: " + err.message;
+        output.textContent = "❌ Error: " + err.message;
     }
 }
 
@@ -378,11 +434,17 @@ async function deleteIface(name) {
         });
 
         const data = await response.json();
-        document.getElementById("output").textContent = data.message || data.detail;
+        
+        if (!response.ok) {
+            document.getElementById("output").textContent = "❌ " + (data.detail || data.message || "Error eliminando interfaz");
+        } else {
+            document.getElementById("output").textContent = "✅ " + (data.message || "Interfaz eliminada exitosamente");
+        }
+
         loadTagging();
 
     } catch (err) {
-        document.getElementById("output").textContent = "Error: " + err.message;
+        document.getElementById("output").textContent = "❌ Error: " + err.message;
     }
 }
 
@@ -390,11 +452,48 @@ document.getElementById("taggingForm").addEventListener("submit", async (e) => {
     e.preventDefault();
 
     const form = e.target;
+    const name = form.name.value.trim();
     let vlan_untag = form.vlan_untag.value.trim();
     let vlan_tag = form.vlan_tag.value.trim();
+    const output = document.getElementById("output");
 
+    // Validar nombre de interfaz
+    if (!name) {
+        output.textContent = "❌ Error: Nombre de interfaz no puede estar vacío";
+        return;
+    }
+
+    if (!isValidInterfaceName(name)) {
+        output.textContent = "❌ Error: Formato de interfaz inválido. Use caracteres alfanuméricos, guiones, puntos o barras bajas (ej: eth0, enp0s8, eth_1).";
+        return;
+    }
+
+    // Normalizar valores vacíos
     vlan_untag = vlan_untag === "" ? "" : vlan_untag;
     vlan_tag = vlan_tag === "" ? "" : vlan_tag;
+
+    // Validar VLAN Untag si se proporciona
+    if (vlan_untag) {
+        if (!isValidVLANId(vlan_untag)) {
+            output.textContent = `❌ Error: VLAN Untag ${vlan_untag} no es válida. Debe estar entre 1 y 4094.`;
+            return;
+        }
+    }
+
+    // Validar VLAN Tag si se proporciona
+    if (vlan_tag) {
+        const validation = validateVLANList(vlan_tag);
+        if (!validation.valid) {
+            output.textContent = `❌ Error en VLAN Tag: ${validation.errors.join(", ")}`;
+            return;
+        }
+    }
+
+    // Al menos una VLAN debe estar configurada
+    if (!vlan_untag && !vlan_tag) {
+        output.textContent = "❌ Error: Debe configurar al menos VLAN Untag o VLAN Tag";
+        return;
+    }
 
     try {
         const response = await fetch("/admin/tagging", {
@@ -405,7 +504,7 @@ document.getElementById("taggingForm").addEventListener("submit", async (e) => {
                 action: "config",
                 params: {
                     action: "add",
-                    name: form.name.value,
+                    name: name,
                     vlan_untag: vlan_untag,
                     vlan_tag: vlan_tag
                 }
@@ -413,13 +512,19 @@ document.getElementById("taggingForm").addEventListener("submit", async (e) => {
         });
 
         const data = await response.json();
-        document.getElementById("output").textContent = data.message || data.detail;
+        
+        if (!response.ok) {
+            output.textContent = "❌ " + (data.detail || data.message || "Error desconocido");
+            return;
+        }
+
+        output.textContent = "✅ " + (data.message || "Interfaz guardada exitosamente");
 
         form.reset();
         loadTagging();
 
     } catch (err) {
-        document.getElementById("output").textContent = "Error: " + err.message;
+        output.textContent = "❌ Error: " + err.message;
     }
 });
 

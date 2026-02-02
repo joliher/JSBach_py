@@ -3,6 +3,8 @@
 import subprocess
 import json
 import os
+import fcntl
+import re
 from typing import Dict, Any, Tuple, Optional
 from ..utils.global_functions import create_module_config_directory, create_module_log_directory
 
@@ -31,13 +33,23 @@ def _load_config() -> dict:
 def _save_config(data: dict) -> None:
     os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
     with open(CONFIG_FILE, "w") as f:
+        # Lock exclusivo para prevenir race conditions
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
         json.dump(data, f, indent=4)
+        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
 
 
 def _update_status(status: int) -> None:
     cfg = _load_config()
     cfg["status"] = status
     _save_config(cfg)
+
+
+def _sanitize_interface_name(name: str) -> bool:
+    """Valida que el nombre de interfaz sea seguro (solo alfanuméricos, puntos, guiones, guiones bajos)."""
+    if not name or not isinstance(name, str):
+        return False
+    return bool(re.match(r'^[a-zA-Z0-9._-]+$', name))
 
 
 def _bridge_exists() -> bool:
@@ -93,7 +105,18 @@ def start(params: Dict[str, Any] = None) -> Tuple[bool, str]:
         if not name:
             continue
         
+        # Validar nombre de interfaz seguro
+        if not _sanitize_interface_name(name):
+            return False, f"Nombre de interfaz inválido: '{name}'. Solo use caracteres alfanuméricos, puntos, guiones y guiones bajos."
+        
         iface_errors = []
+        
+        # Validar que la interfaz física existe
+        success, error = _run_cmd(["/usr/sbin/ip", "link", "show", name])
+        if not success:
+            iface_errors.append(f"interfaz no existe: {error}")
+            errors.append(f"  {name}: " + ", ".join(iface_errors))
+            continue
         
         # Agregar interfaz al bridge
         success, error = _run_cmd(["/usr/sbin/ip", "link", "set", name, "master", "br0"], ignore_error=True)
@@ -189,36 +212,74 @@ def status(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     create_module_log_directory("tagging")
     
     cfg = _load_config()
-    active = cfg.get("status", 0) == 1
-    
-    status_msg = "Tagging ACTIVO" if active else "Tagging INACTIVO"
-    
-    # Mostrar interfaces configuradas
-    interfaces_info = "\nINTERFACES CONFIGURADAS:\n"
     interfaces = cfg.get("interfaces", [])
+    
+    # Verificar si el bridge br0 existe
+    success, br0_info = _run_command(["/usr/sbin/ip", "a", "show", "br0"])
+    br0_exists = success
+    br0_is_up = "state UP" in br0_info if success else False
+    
+    status_lines = ["Estado de Tagging:", "=" * 50]
+    
+    if not br0_exists:
+        status_lines.append("🔴 Bridge br0: NO EXISTE")
+        status_lines.append("\n⚠️ El tagging requiere que el bridge br0 esté creado")
+        return True, "\n".join(status_lines)
+    
+    br0_status = "🟢 UP" if br0_is_up else "🔴 DOWN"
+    status_lines.append(f"Bridge br0: {br0_status}")
+    
+    # Verificar cada interfaz configurada
+    status_lines.append(f"\nInterfaces configuradas: {len(interfaces)}")
+    status_lines.append("-" * 50)
+    
     if interfaces:
         for iface in interfaces:
-            interfaces_info += f"  {iface.get('name')}: UNTAG={iface.get('vlan_untag', '')}, TAG={iface.get('vlan_tag', '')}\n"
+            name = iface.get('name')
+            vlan_untag = iface.get('vlan_untag', '')
+            vlan_tag = iface.get('vlan_tag', '')
+            
+            # Verificar si la interfaz existe y está UP
+            success, iface_info = _run_command(["/usr/sbin/ip", "a", "show", name])
+            
+            if success:
+                is_up = "state UP" in iface_info
+                is_master_br0 = "master br0" in iface_info
+                iface_status = "🟢 UP" if is_up else "🔴 DOWN"
+                bridge_status = " ✅ Conectada a br0" if is_master_br0 else " ⚠️ No conectada a br0"
+            else:
+                iface_status = "❌ NO EXISTE"
+                bridge_status = ""
+            
+            status_lines.append(f"\nInterfaz: {name} [{iface_status}]{bridge_status}")
+            status_lines.append(f"  VLAN sin etiquetar (UNTAG): {vlan_untag if vlan_untag else 'N/A'}")
+            status_lines.append(f"  VLANs etiquetadas (TAG): {vlan_tag if vlan_tag else 'N/A'}")
     else:
-        interfaces_info += "  (sin interfaces)\n"
+        status_lines.append("\n(Sin interfaces configuradas)")
     
-    # Mostrar estado del bridge
-    interfaces_info += "\nESTADO DEL BRIDGE:\n"
+    # Mostrar estado del bridge VLAN
+    status_lines.append("\n" + "=" * 50)
+    status_lines.append("Estado de VLAN en bridge:")
+    status_lines.append("-" * 50)
+    
     try:
         result = subprocess.run(
             ["sudo", "bridge", "vlan", "show"],
             capture_output=True,
             text=True,
-            check=True
+            check=True,
+            timeout=5
         )
         if result.stdout.strip():
-            interfaces_info += result.stdout.rstrip()
+            status_lines.append(result.stdout.rstrip())
         else:
-            interfaces_info += "(sin datos)"
+            status_lines.append("(sin datos)")
     except subprocess.CalledProcessError:
-        interfaces_info += "Error obteniendo estado del bridge"
+        status_lines.append("Error obteniendo estado del bridge")
+    except subprocess.TimeoutExpired:
+        status_lines.append("Timeout obteniendo estado del bridge")
     
-    return True, f"{status_msg}{interfaces_info}"
+    return True, "\n".join(status_lines)
 
 
 def config(params: Dict[str, Any]) -> Tuple[bool, str]:
@@ -297,6 +358,28 @@ def config(params: Dict[str, Any]) -> Tuple[bool, str]:
                             return False, f"Error: cada VLAN en 'vlan_tag' debe estar entre 1 y 4094, recibido: {tag_id}"
                     except (ValueError, TypeError):
                         return False, f"Error: 'vlan_tag' contiene un valor inválido: {tag}"
+        
+        # Cargar VLANs configuradas para validar existencia
+        vlans_cfg_path = os.path.join(os.path.dirname(CONFIG_FILE), "..", "vlans", "vlans.json")
+        configured_vlan_ids = []
+        if os.path.exists(vlans_cfg_path):
+            try:
+                with open(vlans_cfg_path, 'r') as f:
+                    vlans_cfg = json.load(f)
+                    configured_vlan_ids = [v.get("id") for v in vlans_cfg.get("vlans", [])]
+            except Exception:
+                pass  # Si falla la lectura, permitir configuración (puede que VLANs no estén configuradas aún)
+        
+        # Validar que VLANs existan si hay VLANs configuradas
+        if configured_vlan_ids:
+            if vlan_untag and int(vlan_untag) not in configured_vlan_ids:
+                return False, f"Error: VLAN {vlan_untag} no existe en el sistema. Configure la VLAN primero con el módulo VLANs."
+            
+            if vlan_tag:
+                tag_list = [int(t.strip()) for t in vlan_tag.split(',') if t.strip()]
+                for tag_id in tag_list:
+                    if tag_id not in configured_vlan_ids:
+                        return False, f"Error: VLAN {tag_id} no existe en el sistema. Configure la VLAN primero con el módulo VLANs."
         
         # Eliminar si ya existía la interfaz
         cfg["interfaces"] = [i for i in cfg["interfaces"] if i.get("name") != name]

@@ -3,6 +3,10 @@
 import subprocess
 import json
 import os
+import fcntl
+import asyncio
+import time
+import re
 from typing import Dict, Any, Tuple, Optional
 from ..utils.global_functions import create_module_config_directory, create_module_log_directory
 
@@ -15,6 +19,13 @@ CONFIG_FILE = os.path.abspath(
 # Utilidades internas
 # -----------------------------
 
+def _sanitize_interface_name(name: str) -> bool:
+    """Valida que el nombre de interfaz sea seguro (solo alfanuméricos, puntos, guiones, guiones bajos)."""
+    if not name or not isinstance(name, str):
+        return False
+    return bool(re.match(r'^[a-zA-Z0-9._-]+$', name))
+
+
 def _run_command(cmd: list) -> Tuple[bool, str]:
     """Ejecutar comando con sudo automáticamente."""
     try:
@@ -23,7 +34,7 @@ def _run_command(cmd: list) -> Tuple[bool, str]:
             full_cmd,
             capture_output=True,
             text=True,
-            timeout=10,
+            timeout=30,
             check=False
         )
         
@@ -57,6 +68,44 @@ def _update_status(status: int) -> None:
         json.dump(cfg, f, indent=4)
 
 
+async def _verify_dhcp_assignment(iface: str, max_wait: int = 30) -> None:
+    """
+    Verifica en background que se asignó una IP por DHCP.
+    Si después de max_wait segundos no se asignó, detiene el proceso.
+    Se ejecuta como tarea asyncio sin bloquear el flujo principal.
+    """
+    start_time = time.time()
+    check_interval = 2  # Verificar cada 2 segundos
+    
+    while (time.time() - start_time) < max_wait:
+        await asyncio.sleep(check_interval)
+        
+        # Verificar si la interfaz tiene una IP asignada
+        success, ip_info = _run_command(["/usr/sbin/ip", "a", "show", iface])
+        
+        if success and "inet " in ip_info:  # "inet " indica IPv4
+            # Extractar la IP asignada para logging
+            lines = ip_info.split('\n')
+            for line in lines:
+                if "inet " in line:
+                    ip_line = line.strip()
+                    # Logging de éxito (opcional: escribir en log)
+                    break
+            return  # IP asignada correctamente, terminar verificación
+    
+    # Si llegamos aquí, DHCP no asignó IP en el tiempo límite
+    # Registrar error y detener DHCP
+    _run_command(["/usr/sbin/dhcpcd", "-k", iface])
+    cfg = _load_config() or {}
+    cfg["status"] = 0
+    cfg["dhcp_error"] = "DHCP timeout: IP no fue asignada en 30 segundos"
+    os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+    with open(CONFIG_FILE, "w") as f:
+        fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+        json.dump(cfg, f, indent=4)
+        fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+
+
 # -----------------------------
 # Acciones públicas (Admin API)
 # -----------------------------
@@ -85,8 +134,29 @@ def start(params: Dict[str, Any] = None) -> Tuple[bool, str]:
             if not success:
                 return False, f"Error al lanzar DHCP en {iface}: {msg}"
             
+            # Limpiar cualquier error previo de DHCP
+            cfg = _load_config() or {}
+            cfg.pop("dhcp_error", None)
+            
             _update_status(1)
-            return True, f"DHCP iniciado en {iface} (configuración en proceso)"
+            
+            # Crear una tarea asyncio que verifique en background si se asignó la IP
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    # Si ya hay un loop corriendo (ej: en contexto de FastAPI)
+                    asyncio.create_task(_verify_dhcp_assignment(iface))
+                else:
+                    # Sino, crear la tarea en el loop actual
+                    loop.create_task(_verify_dhcp_assignment(iface))
+            except RuntimeError:
+                # Si no hay loop, intentar crear uno nuevo
+                try:
+                    asyncio.create_task(_verify_dhcp_assignment(iface))
+                except:
+                    pass  # Si falla, al menos DHCP se inició correctamente
+            
+            return True, f"DHCP iniciado en {iface} (verificando asignación de IP en background)"
 
         elif mode == "manual":
             _start_manual(iface, cfg)
@@ -153,17 +223,54 @@ def status(params: Dict[str, Any] = None) -> Tuple[bool, str]:
         return False, "Interfaz WAN no definida"
 
     try:
-        # Comprobar si la interfaz existe
+        # Verificar si hay error pendiente de DHCP
+        if cfg and cfg.get("dhcp_error"):
+            dhcp_error = cfg.get("dhcp_error")
+            # Limpiar el error después de reportarlo
+            cfg.pop("dhcp_error", None)
+            os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+            with open(CONFIG_FILE, "w") as f:
+                fcntl.flock(f.fileno(), fcntl.LOCK_EX)
+                json.dump(cfg, f, indent=4)
+                fcntl.flock(f.fileno(), fcntl.LOCK_UN)
+            return False, f"Error de DHCP: {dhcp_error}"
+        
+        # Comprobar si la interfaz existe y su estado
         success, ip_info = _run_command(["/usr/sbin/ip", "a", "show", iface])
         if not success:
             return False, f"La interfaz {iface} no existe"
 
-        # Obtener rutas, aunque la interfaz no tenga rutas configuradas no es crítico
+        # Verificar si la interfaz está UP o DOWN
+        is_up = "state UP" in ip_info or ",UP," in ip_info
+        interface_status = "🟢 UP (activa)" if is_up else "🔴 DOWN (inactiva)"
+        
+        # Verificar si tiene IP asignada
+        has_ip = "inet " in ip_info
+        ip_status = "✅ Tiene IP asignada" if has_ip else "⚠️ Sin IP asignada"
+        
+        # Obtener rutas
         success, routes = _run_command(["/usr/sbin/ip", "r"])
         if not success:
             routes = "No se pudieron obtener las rutas"
+        
+        # Verificar si hay ruta por defecto
+        has_default_route = "default" in routes
+        route_status = "✅ Tiene ruta por defecto" if has_default_route else "⚠️ Sin ruta por defecto"
 
-        return True, f"{ip_info}\n\n{routes}"
+        status_summary = f"""Estado de WAN:
+==================
+Interfaz: {iface}
+Estado físico: {interface_status}
+Estado IP: {ip_status}
+Estado rutas: {route_status}
+
+Detalles de la interfaz:
+{ip_info}
+
+Tabla de rutas:
+{routes}"""
+
+        return True, status_summary
     except Exception as e:
         return False, f"Error obteniendo status: {e}"
 
@@ -180,6 +287,16 @@ def config(params: Dict[str, Any]) -> Tuple[bool, str]:
             if not params.get(r):
                 return False, f"Falta el parámetro '{r}' para modo manual"
 
+    # Validar nombre de interfaz seguro
+    iface = params["interface"]
+    if not _sanitize_interface_name(iface):
+        return False, f"Nombre de interfaz inválido: '{iface}'. Solo use caracteres alfanuméricos, puntos, guiones y guiones bajos."
+    
+    # Validar que la interfaz existe en el sistema
+    success, _ = _run_command(["/usr/sbin/ip", "link", "show", iface])
+    if not success:
+        return False, f"La interfaz '{iface}' no existe en el sistema. Verifique con 'ip link show'."
+
     try:
         # Cargar configuración existente para preservar el status
         existing_cfg = _load_config() or {}
@@ -190,7 +307,10 @@ def config(params: Dict[str, Any]) -> Tuple[bool, str]:
         # Guardar la configuración completa
         os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
         with open(CONFIG_FILE, "w") as f:
+            # Lock exclusivo para prevenir race conditions
+            fcntl.flock(f.fileno(), fcntl.LOCK_EX)
             json.dump(existing_cfg, f, indent=4)
+            fcntl.flock(f.fileno(), fcntl.LOCK_UN)
         return True, "Configuración WAN guardada"
     except Exception as e:
         return False, f"Error guardando configuración WAN: {e}"

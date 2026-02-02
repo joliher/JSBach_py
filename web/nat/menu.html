@@ -112,17 +112,23 @@ function runNat(event, action, btn) {
         return;
     }
 
-    // Otras acciones → mostrar logs.html
-    iframe.location.href = "/web/nat/logs.html";
+    // Acciones START/STOP/RESTART/STATUS → cargar status.html para feedback
+    if (action === "start" || action === "stop" || action === "restart" || action === "status") {
+        iframe.location.href = "/web/nat/status.html";
+        // Ejecutar acción backend
+        fetch('/admin/nat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action }),
+            credentials: 'include'
+        }).catch(error => {
+            console.error("Error al ejecutar la acción:", error);
+        });
+        return;
+    }
 
-    // Ejecutar acción backend
-    fetch('/admin/nat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action })
-    }).catch(error => {
-        console.error("Error al ejecutar la acción:", error);
-    });
+    // Otras acciones → mostrar info.html
+    iframe.location.href = "/web/nat/info.html";
 }
 
 // Restaurar botón seleccionado

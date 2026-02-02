@@ -400,29 +400,51 @@ async function saveRow(id) {
     const tr = document.querySelector(`tr[data-id="${id}"]`);
     const inputs = tr.querySelectorAll("input");
     const [name, ip_interface, ip_network] = Array.from(inputs).map(i => i.value.trim());
+    const output = document.getElementById("output");
+
+    // Validar nombre
+    if (!name) {
+        output.textContent = "❌ Error: Nombre no puede estar vacío";
+        return;
+    }
+
+    // Validar IP de interfaz
+    if (!ip_interface) {
+        output.textContent = "❌ Error: IP de interfaz no puede estar vacía";
+        return;
+    }
 
     if (!isValidCIDR(ip_interface)) {
-        alert("IP de interfaz inválida. Formato esperado: 192.168.1.1/24");
+        output.textContent = "❌ Error: Formato de IP de interfaz inválido. Esperado: 192.168.1.1/24 (incluir máscara CIDR)";
         return;
     }
 
     if (!isValidInterfaceIP(ip_interface)) {
-        alert("IP de interfaz no puede terminar en 0 o 255");
+        output.textContent = "❌ Error: IP de interfaz no puede terminar en 0 (dirección de red) ni en 255 (broadcast). Use una IP de host válida (ej: 192.168.1.1).";
+        return;
+    }
+
+    // Validar IP de red
+    if (!ip_network) {
+        output.textContent = "❌ Error: IP de red no puede estar vacía";
         return;
     }
 
     if (!isValidNetworkIP(ip_network)) {
-        alert("IP de red inválida. Debe tener último octeto 0 (ej: 192.168.1.0/24)");
+        output.textContent = "❌ Error: IP de red debe terminar en 0 (ej: 192.168.1.0/24). Formato esperado: X.X.X.0/máscara";
         return;
     }
 
     if (!haveSameMask(ip_interface, ip_network)) {
-        alert("La máscara de la IP de interfaz debe coincidir con la máscara de la red");
+        const maskIface = ip_interface.split('/')[1];
+        const maskNet = ip_network.split('/')[1];
+        output.textContent = `❌ Error: Las máscaras no coinciden. IP interfaz: /${maskIface}, IP red: /${maskNet}. Deben ser iguales.`;
         return;
     }
 
     if (!isIpInNetwork(ip_interface, ip_network)) {
-        alert(`La IP de interfaz ${ip_interface.split('/')[0]} no está dentro de la red ${ip_network}`);
+        const ipAddr = ip_interface.split('/')[0];
+        output.textContent = `❌ Error: La IP de interfaz ${ipAddr} no pertenece a la red ${ip_network}. Rango válido: desde ${ip_network.split('/')[0].replace(/0$/, '1')} hasta ${ip_network.split('/')[0].replace(/0$/, '254')}`;
         return;
     }
 
@@ -444,7 +466,13 @@ async function saveRow(id) {
         });
 
         const data = await response.json();
-        document.getElementById("output").textContent = data.message || data.detail;
+        
+        if (!response.ok) {
+            output.textContent = "❌ " + (data.detail || data.message || "Error desconocido");
+            return;
+        }
+
+        output.textContent = "✅ " + (data.message || "VLAN guardada exitosamente");
         loadVlans();
 
     } catch (err) {
@@ -486,31 +514,72 @@ document.getElementById("vlanForm").addEventListener("submit", async (e) => {
     e.preventDefault();
 
     const form = e.target;
+    const vlanId = form.id.value.trim();
+    const name = form.name.value.trim();
     const ip_interface = form.ip_interface.value.trim();
     const ip_network = form.ip_network.value.trim();
+    const output = document.getElementById("output");
+
+    // Validar ID
+    if (!vlanId) {
+        output.textContent = "❌ Error: ID de VLAN no puede estar vacío";
+        return;
+    }
+
+    const vlanIdNum = parseInt(vlanId);
+    if (isNaN(vlanIdNum) || vlanIdNum < 1 || vlanIdNum > 4094) {
+        output.textContent = "❌ Error: ID de VLAN debe estar entre 1 y 4094";
+        return;
+    }
+
+    if (vlanIdNum === 1 || vlanIdNum === 2) {
+        output.textContent = "❌ Error: VLANs 1 y 2 están protegidas y preconfiguradas";
+        return;
+    }
+
+    // Validar nombre
+    if (!name) {
+        output.textContent = "❌ Error: Nombre no puede estar vacío";
+        return;
+    }
+
+    // Validar IP de interfaz
+    if (!ip_interface) {
+        output.textContent = "❌ Error: IP de interfaz no puede estar vacía";
+        return;
+    }
 
     if (!isValidCIDR(ip_interface)) {
-        alert("IP de interfaz inválida. Formato esperado: 192.168.1.1/24");
+        output.textContent = "❌ Error: Formato de IP de interfaz inválido. Esperado: 192.168.1.1/24 (incluir máscara CIDR)";
         return;
     }
 
     if (!isValidInterfaceIP(ip_interface)) {
-        alert("IP de interfaz no puede terminar en 0 o 255");
+        output.textContent = "❌ Error: IP de interfaz no puede terminar en 0 (dirección de red) ni en 255 (broadcast). Use una IP de host válida (ej: 192.168.1.1).";
+        return;
+    }
+
+    // Validar IP de red
+    if (!ip_network) {
+        output.textContent = "❌ Error: IP de red no puede estar vacía";
         return;
     }
 
     if (!isValidNetworkIP(ip_network)) {
-        alert("IP de red inválida. Debe tener último octeto 0 (ej: 192.168.1.0/24)");
+        output.textContent = "❌ Error: IP de red debe terminar en 0 (ej: 192.168.1.0/24). Formato esperado: X.X.X.0/máscara";
         return;
     }
 
     if (!haveSameMask(ip_interface, ip_network)) {
-        alert("La máscara de la IP de interfaz debe coincidir con la máscara de la red");
+        const maskIface = ip_interface.split('/')[1];
+        const maskNet = ip_network.split('/')[1];
+        output.textContent = `❌ Error: Las máscaras no coinciden. IP interfaz: /${maskIface}, IP red: /${maskNet}. Deben ser iguales.`;
         return;
     }
 
     if (!isIpInNetwork(ip_interface, ip_network)) {
-        alert(`La IP de interfaz ${ip_interface.split('/')[0]} no está dentro de la red ${ip_network}`);
+        const ipAddr = ip_interface.split('/')[0];
+        output.textContent = `❌ Error: La IP de interfaz ${ipAddr} no pertenece a la red ${ip_network}. Rango válido: desde ${ip_network.split('/')[0].replace(/0$/, '1')} hasta ${ip_network.split('/')[0].replace(/0$/, '254')}`;
         return;
     }
 
@@ -532,13 +601,18 @@ document.getElementById("vlanForm").addEventListener("submit", async (e) => {
         });
 
         const data = await response.json();
-        document.getElementById("output").textContent = data.message || data.detail;
+        
+        if (!response.ok) {
+            output.textContent = "❌ " + (data.detail || data.message || "Error desconocido");
+        } else {
+            output.textContent = "✅ " + (data.message || "VLAN guardada exitosamente");
+        }
 
         form.reset();
         loadVlans();
 
     } catch (err) {
-        document.getElementById("output").textContent = "Error: " + err.message;
+        document.getElementById("output").textContent = "❌ Error: " + err.message;
     }
 });
 

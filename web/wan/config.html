@@ -136,14 +136,17 @@
         <form id="wanForm">
             <div class="form-group">
                 <label for="interface">Interfaz</label>
-                <input type="text" id="interface" placeholder="eth0" required>
+                <input type="text" id="interface" placeholder="eth0, ens0, enp0s3, wlan0" required>
+                <small style="color: #666; font-size: 12px; margin-top: 5px; display: block;">
+                    💡 Debe ser una interfaz física existente (eth0, ens3, enp0s3, etc.). Será verificada en el servidor.
+                </small>
             </div>
 
             <div class="form-group">
                 <label for="mode">Modo</label>
                 <select id="mode">
-                    <option value="dhcp">DHCP</option>
-                    <option value="manual">Manual</option>
+                    <option value="dhcp">DHCP (obtener IP automáticamente)</option>
+                    <option value="manual">Manual (IP estática)</option>
                 </select>
             </div>
 
@@ -151,21 +154,33 @@
                 <div class="form-group">
                     <label for="ip">IP</label>
                     <input type="text" id="ip" placeholder="192.168.1.10">
+                    <small style="color: #666; font-size: 12px; margin-top: 5px; display: block;">
+                        Ejemplo: 192.168.100.1
+                    </small>
                 </div>
 
                 <div class="form-group">
                     <label for="mask">Máscara (CIDR)</label>
                     <input type="number" id="mask" placeholder="24" min="0" max="32">
+                    <small style="color: #666; font-size: 12px; margin-top: 5px; display: block;">
+                        Rango: 0–32. Ejemplo: 24 para /24 (255.255.255.0)
+                    </small>
                 </div>
 
                 <div class="form-group">
                     <label for="gateway">Gateway</label>
                     <input type="text" id="gateway" placeholder="192.168.1.1">
+                    <small style="color: #666; font-size: 12px; margin-top: 5px; display: block;">
+                        IP del router/puerta de enlace
+                    </small>
                 </div>
 
                 <div class="form-group">
                     <label for="dns">DNS (separados por coma)</label>
                     <input type="text" id="dns" placeholder="8.8.8.8,1.1.1.1">
+                    <small style="color: #666; font-size: 12px; margin-top: 5px; display: block;">
+                        Ejemplo: 8.8.8.8,1.1.1.1 o 8.8.8.8
+                    </small>
                 </div>
             </div>
 
@@ -195,6 +210,11 @@ function isValidDNSList(dns) {
     const servers = dns.split(",").map(d => d.trim()).filter(Boolean);
     if (servers.length === 0) return false;
     return servers.every(isValidIPv4);
+}
+
+function isValidInterfaceName(iface) {
+    // Valida que sea alfanumérico, guiones y puntos (eth0, ens3, enp0s3, wlan0, etc)
+    return /^[a-zA-Z0-9._-]+$/.test(iface);
 }
 
 function showError(msg) {
@@ -234,6 +254,11 @@ async function loadWanConfiguration() {
             const wanStatus = wanConfig.status === 1 ? "Activo" : "Inactivo";
             
             let details = `${wanInterface} (Modo: ${wanMode}, Estado: ${wanStatus})`;
+            
+            // Si hay error de DHCP, mostrarlo en el detalle
+            if (wanConfig.dhcp_error) {
+                details += `\n⚠️ DHCP Error: ${wanConfig.dhcp_error}`;
+            }
             
             document.getElementById("wan-details").textContent = details;
             document.getElementById("wan-info-container").style.display = "block";
@@ -278,7 +303,11 @@ form.addEventListener("submit", async (e) => {
     const mode = modeSelect.value;
 
     if (!iface) {
-        return showError("La interfaz no puede estar vacía");
+        return showError("❌ La interfaz no puede estar vacía");
+    }
+
+    if (!isValidInterfaceName(iface)) {
+        return showError("❌ Formato de interfaz inválido. Use caracteres alfanuméricos, guiones o puntos (ej: eth0, ens3, enp0s3)");
     }
 
     const params = {
@@ -292,17 +321,29 @@ form.addEventListener("submit", async (e) => {
         const gateway = document.getElementById("gateway").value.trim();
         const dns = document.getElementById("dns").value.trim();
 
+        if (!ip) {
+            return showError("❌ IP no puede estar vacía");
+        }
         if (!isValidIPv4(ip)) {
-            return showError("IP inválida");
+            return showError(`❌ IP inválida: ${ip}. Use formato válido (ej: 192.168.1.10)`);
+        }
+        if (!mask) {
+            return showError("❌ Máscara (CIDR) no puede estar vacía");
         }
         if (!isValidCIDR(mask)) {
-            return showError("Máscara inválida (0–32)");
+            return showError("❌ Máscara inválida. Use un valor entre 0 y 32 (ej: 24 para /24)");
+        }
+        if (!gateway) {
+            return showError("❌ Gateway no puede estar vacío");
         }
         if (!isValidIPv4(gateway)) {
-            return showError("Gateway inválido");
+            return showError(`❌ Gateway inválido: ${gateway}. Use formato válido (ej: 192.168.1.1)`);
+        }
+        if (!dns) {
+            return showError("❌ DNS no puede estar vacío");
         }
         if (!isValidDNSList(dns)) {
-            return showError("DNS inválido (use IPs separadas por comas)");
+            return showError(`❌ DNS inválido: ${dns}. Use IPs válidas separadas por comas (ej: 8.8.8.8,1.1.1.1)`);
         }
 
         params.ip = ip;
@@ -327,10 +368,17 @@ form.addEventListener("submit", async (e) => {
         const data = await response.json();
 
         if (!response.ok) {
-            throw new Error(data.detail || "Error desconocido");
+            // Si es error del servidor, mostrar con más contexto
+            let errorMsg = data.detail || "Error desconocido";
+            if (errorMsg.includes("no existe")) {
+                errorMsg = "❌ " + errorMsg + " Verifique con 'ip link show' qué interfaces están disponibles.";
+            } else {
+                errorMsg = "❌ Error: " + errorMsg;
+            }
+            throw new Error(errorMsg);
         }
 
-        showSuccess(data.message);
+        showSuccess("✅ " + data.message);
         
         // Actualizar la información de la interfaz WAN configurada
         await loadWanConfiguration();

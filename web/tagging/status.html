@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>DMZ - Estado</title>
+    <title>Tagging - Estado</title>
     <style>
         html, body {
             margin: 0;
@@ -79,7 +79,7 @@
 </head>
 <body>
 <div class="container">
-    <h2>📊 Estado de DMZ</h2>
+    <h2>📊 Estado de Tagging</h2>
     
     <div class="button-group">
         <button onclick="refreshStatus()" id="btnRefresh">🔄 Actualizar</button>
@@ -87,7 +87,7 @@
     </div>
     
     <div id="statusContainer">
-        <div class="loading">Cargando estado de DMZ...</div>
+        <div class="loading">Cargando estado de Tagging...</div>
     </div>
 </div>
 
@@ -97,10 +97,10 @@ async function refreshStatus() {
     const btn = document.getElementById('btnRefresh');
     
     btn.disabled = true;
-    container.innerHTML = '<div class="loading">Cargando estado de DMZ...</div>';
+    container.innerHTML = '<div class="loading">Cargando estado de Tagging...</div>';
     
     try {
-        const response = await fetch('/admin/dmz', {
+        const response = await fetch('/admin/tagging', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ action: 'status' }),
@@ -135,7 +135,7 @@ async function refreshStatus() {
 
 function goBack() {
     if (parent && parent.frames['body']) {
-        parent.frames['body'].location.href = '/web/dmz/info.html';
+        parent.frames['body'].location.href = '/web/tagging/info.html';
     }
 }
 
