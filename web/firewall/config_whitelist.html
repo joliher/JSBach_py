@@ -236,21 +236,16 @@
         let firewallConfig = {};
 
         async function loadConfig() {
-            console.log('=== Iniciando loadConfig ===');
             try {
-                console.log('Haciendo fetch a /admin/config/firewall/firewall.json');
                 const response = await fetch('/admin/config/firewall/firewall.json', {
                     credentials: 'include'
                 });
-                
-                console.log('Response status:', response.status);
                 
                 if (!response.ok) {
                     throw new Error('No se pudo cargar la configuración');
                 }
 
                 firewallConfig = await response.json();
-                console.log('Config cargada:', firewallConfig);
                 
                 // Verificar si el firewall está activo
                 if (firewallConfig.status === 0 || !firewallConfig.vlans || Object.keys(firewallConfig.vlans).length === 0) {
@@ -268,10 +263,8 @@
                     return;
                 }
                 
-                console.log('Llamando a renderVLANs()...');
                 renderVLANs();
             } catch (error) {
-                console.error('Error cargando configuración:', error);
                 document.getElementById('content').innerHTML = `
                     <div class="warning-box">
                         ⚠️ Error al cargar configuración. Asegúrese de que el firewall esté iniciado (START).
@@ -281,16 +274,12 @@
         }
 
         function renderVLANs() {
-            console.log('=== Iniciando renderVLANs ===');
             const vlans = firewallConfig.vlans || {};
             let vlanIds = Object.keys(vlans);
-            console.log('VLANs encontradas:', vlanIds);
             
             // Separar VLANs especiales (1 y 2) de las normales
             const specialVlanIds = vlanIds.filter(id => id == 1 || id == 2).sort((a, b) => parseInt(a) - parseInt(b));
             const normalVlanIds = vlanIds.filter(id => id != 1 && id != 2).sort((a, b) => parseInt(a) - parseInt(b));
-            console.log('VLANs especiales:', specialVlanIds);
-            console.log('VLANs normales:', normalVlanIds);
 
             if (vlanIds.length === 0) {
                 document.getElementById('content').innerHTML = `
@@ -305,7 +294,6 @@
             
             // Renderizar VLANs especiales (aislamiento + restricción)
             if (specialVlanIds.length > 0) {
-                console.log('Renderizando VLANs especiales...');
                 html += '<h3 style="color: #667eea; margin-top: 0;">🔐 VLANs Especiales (Aislamiento + Restricción)</h3>';
                 
                 specialVlanIds.forEach(vlanId => {
@@ -362,7 +350,6 @@
             }
 
             // Renderizar VLANs normales (whitelist)
-            console.log('Renderizando VLANs normales...');
             normalVlanIds.forEach(vlanId => {
                 const vlan = vlans[vlanId];
                 const enabled = vlan.whitelist_enabled || false;
@@ -446,18 +433,13 @@
                 `;
             });
 
-            console.log('HTML generado, longitud:', html.length);
-            console.log('Actualizando DOM...');
             document.getElementById('content').innerHTML = html;
-            console.log('=== renderVLANs completado ===');
         }
 
         async function toggleWhitelist(vlanId) {
             const vlan = firewallConfig.vlans[vlanId];
             const currentState = vlan.whitelist_enabled || false;
             const action = currentState ? 'disable_whitelist' : 'enable_whitelist';
-
-            console.log(`Toggling whitelist for VLAN ${vlanId}: ${action}`);
 
             try {
                 const response = await fetch('/admin/firewall', {
@@ -478,12 +460,10 @@
                 if (result.success) {
                     firewallConfig.vlans[vlanId].whitelist_enabled = !currentState;
                     renderVLANs();
-                    console.log('Whitelist toggled successfully');
                 } else {
                     alert('Error: ' + (result.message || 'No se pudo cambiar el estado'));
                 }
             } catch (error) {
-                console.error('Error toggling whitelist:', error);
                 alert('Error de conexión al servidor');
             }
         }
@@ -539,8 +519,6 @@
                 }
             }
 
-            console.log(`Adding rule "${rule}" to VLAN ${vlanId}`);
-
             try {
                 const response = await fetch('/admin/firewall', {
                     method: 'POST',
@@ -565,12 +543,10 @@
                     
                     input.value = '';
                     renderVLANs();
-                    console.log('Rule added successfully');
                 } else {
                     alert('Error: ' + (result.message || 'No se pudo agregar la regla'));
                 }
             } catch (error) {
-                console.error('Error adding rule:', error);
                 alert('Error de conexión al servidor');
             }
         }
@@ -580,7 +556,6 @@
                 return;
             }
 
-            console.log(`Removing rule "${rule}" from VLAN ${vlanId}`);
 
             try {
                 const response = await fetch('/admin/firewall', {
@@ -605,12 +580,10 @@
                     }
                     
                     renderVLANs();
-                    console.log('Rule removed successfully');
                 } else {
                     alert('Error: ' + (result.message || 'No se pudo eliminar la regla'));
                 }
             } catch (error) {
-                console.error('Error removing rule:', error);
                 alert('Error de conexión al servidor');
             }
         }
@@ -626,8 +599,6 @@
             if (!confirm(`¿Está seguro de ${actionText} la VLAN ${vlanId}?`)) {
                 return;
             }
-
-            console.log(`${action} VLAN ${vlanId}`);
 
             try {
                 const response = await fetch('/admin/firewall', {
@@ -648,12 +619,10 @@
                     firewallConfig.vlans[vlanId].isolated = !currentlyIsolated;
                     renderVLANs();
                     alert(result.message || `VLAN ${vlanId} ${actionText}da correctamente`);
-                    console.log(`VLAN ${vlanId} ${actionText}da successfully`);
                 } else {
                     alert('Error: ' + (result.message || `No se pudo ${actionText} la VLAN`));
                 }
             } catch (error) {
-                console.error(`Error ${actionText}ndo VLAN:`, error);
                 alert('Error de conexión al servidor');
             }
         }
@@ -669,8 +638,6 @@
             if (!confirm(confirmMsg)) {
                 return;
             }
-
-            console.log(`${action} VLAN ${vlanId}`);
 
             try {
                 const response = await fetch('/admin/firewall', {
@@ -691,12 +658,10 @@
                     firewallConfig.vlans[vlanId].restricted = !currentlyRestricted;
                     renderVLANs();
                     alert(result.message || `VLAN ${vlanId} ${actionText}da correctamente`);
-                    console.log(`VLAN ${vlanId} ${actionText}da successfully`);
                 } else {
                     alert('Error: ' + (result.message || `No se pudo ${actionText} la VLAN`));
                 }
             } catch (error) {
-                console.error(`Error ${actionText}endo VLAN:`, error);
                 alert('Error de conexión al servidor');
             }
         }
@@ -710,8 +675,6 @@
             if (!confirm(confirmMsg)) {
                 return;
             }
-
-            console.log('Enviando reset_defaults al backend...');
 
             try {
                 const response = await fetch('/admin/firewall', {
@@ -736,14 +699,11 @@
                     alert('Error: ' + (result.message || 'No se pudo restaurar los valores por defecto'));
                 }
             } catch (error) {
-                console.error('Error al resetear:', error);
                 alert('Error de conexión al servidor');
             }
         }
 
-        console.log('Script cargado, esperando DOMContentLoaded...');
         window.addEventListener('DOMContentLoaded', () => {
-            console.log('DOM cargado, ejecutando loadConfig()');
             loadConfig();
         });
     </script>

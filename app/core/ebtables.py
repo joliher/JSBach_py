@@ -7,6 +7,7 @@ import json
 import os
 import logging
 import fcntl
+import re
 from typing import Dict, Any, Tuple, List
 from ..utils.global_functions import (
     create_module_config_directory,
@@ -201,6 +202,89 @@ def _check_tagging_active() -> Tuple[bool, str]:
     return True, None
 
 
+def _check_interface_vlan_conflict(vlan_id: int, vlan_interfaces: List[str], tagging_cfg: dict) -> Tuple[bool, str]:
+    """Validar que las interfaces no causen conflicto de VLANs.
+    
+    Reglas:
+    - Una interfaz en modo UNTAGGED puede estar SOLO en una VLAN
+    - Una interfaz en modo TAGGED puede estar en múltiples VLANs
+    
+    Args:
+        vlan_id: ID de la VLAN a validar
+        vlan_interfaces: Interfaces que van a aislarse para esta VLAN
+        tagging_cfg: Configuración de tagging.json
+    
+    Returns:
+        (True, "") si no hay conflictos
+        (False, mensaje_error) si hay conflicto
+    """
+    # Crear mapa de interfaz → (vlan_untag, vlan_tag)
+    iface_vlan_map = {}
+    for iface in tagging_cfg.get("interfaces", []):
+        iface_name = iface.get("name", "")
+        vlan_untag = iface.get("vlan_untag", "").strip()
+        vlan_tag = iface.get("vlan_tag", "").strip()
+        
+        if iface_name:
+            iface_vlan_map[iface_name] = {
+                "untag": int(vlan_untag) if vlan_untag else None,
+                "tag": [int(v.strip()) for v in vlan_tag.split(",") if v.strip()] if vlan_tag else []
+            }
+    
+    # Validar cada interfaz de la VLAN
+    for iface in vlan_interfaces:
+        if iface not in iface_vlan_map:
+            # Interfaz no en tagging.json - considerar error
+            return False, f"Interfaz {iface} no está configurada en tagging.json"
+        
+        iface_config = iface_vlan_map[iface]
+        
+        # Si está en modo UNTAGGED
+        if iface_config["untag"] is not None:
+            # Debe estar SOLO en una VLAN
+            if iface_config["untag"] != vlan_id:
+                return False, (
+                    f"Conflicto: Interfaz {iface} está en VLAN {iface_config['untag']} (UNTAGGED). "
+                    f"Una interfaz UNTAGGED no puede estar en múltiples VLANs. "
+                    f"Está intentando añadirla a VLAN {vlan_id}."
+                )
+        else:
+            # Si no tiene UNTAGGED, debe estar en TAGGED
+            # Pero vlan_id debe estar en su lista de VLANs TAGGED
+            if vlan_id not in iface_config["tag"]:
+                return False, (
+                    f"Conflicto: Interfaz {iface} no está configurada para VLAN {vlan_id}. "
+                    f"VLANs TAGGED configuradas: {iface_config['tag']}"
+                )
+    
+    return True, ""
+
+
+def _check_vlan_already_isolated(vlan_id: int, ebtables_cfg: dict) -> Tuple[bool, str]:
+    """Validar que una VLAN no sea aislada dos veces (evita sobrescrituras).
+    
+    Args:
+        vlan_id: ID de la VLAN a validar
+        ebtables_cfg: Configuración actual de ebtables.json
+    
+    Returns:
+        (True, "") si la VLAN no está aislada
+        (False, mensaje_error) si ya está aislada
+    """
+    vlans = ebtables_cfg.get("vlans", {})
+    vlan_id_str = str(vlan_id)
+    
+    if vlan_id_str in vlans:
+        vlan_data = vlans[vlan_id_str]
+        if vlan_data.get("isolated") == True:
+            return False, (
+                f"VLAN {vlan_id} ya está aislada. "
+                f"Para cambiar su configuración, primero desaísla con: /desaislar {vlan_id}"
+            )
+    
+    return True, ""
+
+
 def _check_dependencies() -> Tuple[bool, str]:
     """Verificar que todos los módulos requeridos estén activos.
     
@@ -384,6 +468,13 @@ def _apply_isolation(vlan_id: int, wan_iface: str, vlan_interfaces: List[str]) -
     """
     chain_name = f"FORWARD_VLAN_{vlan_id}"
     
+    # Validar conflictos de VLANs antes de aplicar aislamiento
+    tagging_cfg = _load_tagging_config()
+    conflict_ok, conflict_msg = _check_interface_vlan_conflict(vlan_id, vlan_interfaces, tagging_cfg)
+    if not conflict_ok:
+        logger.error(f"Conflicto de VLAN: {conflict_msg}")
+        return False
+    
     logger.info(f"Aplicando aislamiento a VLAN {vlan_id} - Interfaces: {vlan_interfaces}")
     
     # Asegurar que la cadena existe
@@ -501,6 +592,156 @@ def _remove_isolation(vlan_id: int, vlan_interfaces: List[str] = None) -> bool:
 
 
 # =============================================================================
+# UTILIDADES PARA MAC WHITELIST
+# =============================================================================
+
+def _validate_mac_address(mac: str) -> bool:
+    """Validar que una dirección MAC tenga formato XX:XX:XX:XX:XX:XX."""
+    if not isinstance(mac, str):
+        return False
+    
+    # Validar formato XX:XX:XX:XX:XX:XX
+    pattern = r'^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$'
+    if not re.match(pattern, mac):
+        return False
+    
+    # Validación pasó
+    return True
+
+
+def _normalize_mac_address(mac: str) -> str:
+    """Normalizar MAC a formato estándar XX:XX:XX:XX:XX:XX en mayúsculas."""
+    mac = mac.upper().replace('-', ':')
+    return mac
+
+
+def _apply_mac_whitelist_rules(vlan_id: int, wan_iface: str, whitelist: List[str]) -> bool:
+    """Aplicar reglas de ebtables para MAC whitelist en VLAN 1.
+    
+    Cuando whitelist está habilitada:
+    - Solo MACs en la whitelist pueden comunicarse
+    - Resto son bloqueadas
+    
+    Usa ebtables con:
+    - INPUT: protege acceso desde interfaces VLAN 1
+    - FORWARD_VLAN_1: protege tráfico entre VLANs
+    
+    Estructura de reglas:
+    INPUT/FORWARD_VLAN_1:
+      -s <whitelisted_mac> -j ACCEPT    (para cada MAC en whitelist)
+      -j DROP                            (rechaza MACs no whitelisted)
+    """
+    if vlan_id != 1:
+        logger.warning(f"MAC whitelist solo soportada para VLAN 1, no VLAN {vlan_id}")
+        return False
+    
+    # Validar que las MACs sean válidas
+    for mac in whitelist:
+        if not _validate_mac_address(mac):
+            logger.error(f"MAC inválida en whitelist: {mac}")
+            return False
+    
+    chain_name = f"FORWARD_VLAN_{vlan_id}"
+    
+    # Limpiar todas las reglas de whitelist anteriores
+    # (eliminar todas las reglas con -s <mac> -j ACCEPT y el DROP final)
+    for chain_to_clean in ["INPUT", chain_name]:
+        success, output = _run_ebtables(["-L", chain_to_clean, "--Ln"])
+        if success:
+            lines = output.strip().split('\n')
+            # Buscar y eliminar reglas con -s <mac> -j ACCEPT
+            for line in lines:
+                if '-s ' in line and '-j ACCEPT' in line:
+                    # Extraer la dirección MAC de la línea
+                    parts = line.split()
+                    try:
+                        s_idx = parts.index('-s')
+                        if s_idx + 1 < len(parts):
+                            mac = parts[s_idx + 1]
+                            # Eliminar la regla específica
+                            _run_ebtables(["-D", chain_to_clean, "-s", mac, "-j", "ACCEPT"])
+                            logger.info(f"Regla antigua {chain_to_clean} -s {mac} -j ACCEPT eliminada")
+                    except (ValueError, IndexError):
+                        continue
+            
+            # Eliminar DROP final si existe
+            if '-j DROP' in output:
+                _run_ebtables(["-D", chain_to_clean, "-j", "DROP"])
+                logger.info(f"DROP final eliminado de {chain_to_clean}")
+    
+    # Aplicar reglas para cada MAC whitelisted (o DROP si whitelist está vacío)
+    if whitelist:
+        for mac_addr in whitelist:
+            # Normalizar MAC
+            normalized_mac = _normalize_mac_address(mac_addr)
+            
+            # Agregar en INPUT (para tráfico directo a VLAN 1)
+            success, msg = _run_ebtables(["-A", "INPUT", "-s", normalized_mac, "-j", "ACCEPT"])
+            if not success:
+                logger.warning(f"Error agregando regla INPUT para {normalized_mac}: {msg}")
+            else:
+                logger.info(f"Regla INPUT -s {normalized_mac} -j ACCEPT agregada")
+            
+            # Agregar en FORWARD_VLAN_1 (para tráfico entre VLANs)
+            success, msg = _run_ebtables(["-A", chain_name, "-s", normalized_mac, "-j", "ACCEPT"])
+            if not success:
+                logger.warning(f"Error agregando regla {chain_name} para {normalized_mac}: {msg}")
+            else:
+                logger.info(f"Regla {chain_name} -s {normalized_mac} -j ACCEPT agregada")
+    
+    # IMPORTANTE: Agregar DROP final SIEMPRE (incluso si whitelist está vacía)
+    # Esto bloquea todo el tráfico que no coincida con las reglas ACCEPT
+    for chain_to_protect in ["INPUT", chain_name]:
+        success, msg = _run_ebtables(["-A", chain_to_protect, "-j", "DROP"])
+        if not success:
+            logger.warning(f"Error agregando DROP final en {chain_to_protect}: {msg}")
+        else:
+            logger.info(f"DROP final agregado a {chain_to_protect}")
+    
+    logger.info(f"MAC whitelist aplicada a VLAN 1 con {len(whitelist)} entradas")
+    return True
+
+
+def _remove_mac_whitelist_rules(vlan_id: int) -> bool:
+    """Remover todas las reglas de MAC whitelist de las cadenas ebtables.
+    
+    Elimina las reglas -s <mac> -j ACCEPT y el DROP final de INPUT y FORWARD_VLAN_1.
+    """
+    if vlan_id != 1:
+        logger.warning(f"MAC whitelist solo soportada para VLAN 1, no VLAN {vlan_id}")
+        return False
+    
+    chain_name = f"FORWARD_VLAN_{vlan_id}"
+    
+    # Limpiar reglas de whitelist de INPUT y FORWARD_VLAN_1
+    for chain_to_clean in ["INPUT", chain_name]:
+        success, output = _run_ebtables(["-L", chain_to_clean, "--Ln"])
+        if success:
+            lines = output.strip().split('\n')
+            
+            # Eliminar todas las reglas con -s <mac> -j ACCEPT
+            for line in lines:
+                if '-s ' in line and '-j ACCEPT' in line:
+                    parts = line.split()
+                    try:
+                        s_idx = parts.index('-s')
+                        if s_idx + 1 < len(parts):
+                            mac = parts[s_idx + 1]
+                            _run_ebtables(["-D", chain_to_clean, "-s", mac, "-j", "ACCEPT"])
+                            logger.info(f"Regla {chain_to_clean} -s {mac} -j ACCEPT eliminada")
+                    except (ValueError, IndexError):
+                        continue
+            
+            # Eliminar DROP final si existe
+            if '-j DROP' in output:
+                _run_ebtables(["-D", chain_to_clean, "-j", "DROP"])
+                logger.info(f"DROP final eliminado de {chain_to_clean}")
+    
+    logger.info(f"MAC whitelist removida de VLAN {vlan_id}")
+    return True
+
+
+# =============================================================================
 # ACCIONES PÚBLICAS
 # =============================================================================
 
@@ -609,6 +850,24 @@ def start(params: Dict[str, Any] = None) -> Tuple[bool, str]:
             _remove_isolation(vlan_id)
             logger.info(f"VLAN {vlan_id} configurada como NO AISLADA")
             results.append(f"VLAN {vlan_id} ({vlan_name}): NO AISLADA")
+        
+        # Aplicar MAC whitelist para VLAN 1 si está habilitada
+        if vlan_id == 1:
+            mac_whitelist_enabled = ebtables_cfg["vlans"][vlan_id_str].get("mac_whitelist_enabled", False)
+            mac_whitelist = ebtables_cfg["vlans"][vlan_id_str].get("mac_whitelist", [])
+            
+            if mac_whitelist_enabled:
+                if _apply_mac_whitelist_rules(vlan_id, wan_iface, mac_whitelist):
+                    logger.info(f"VLAN 1: MAC whitelist aplicada con {len(mac_whitelist)} entradas")
+                    if mac_whitelist:
+                        results.append(f"VLAN 1: Whitelist activa ({len(mac_whitelist)} MACs)")
+                    else:
+                        results.append(f"VLAN 1: Whitelist habilitada (sin MACs configuradas)")
+                else:
+                    errors.append(f"VLAN 1: Error aplicando MAC whitelist")
+                    logger.error(f"Error aplicando MAC whitelist a VLAN 1")
+            else:
+                logger.info(f"VLAN 1: MAC whitelist deshabilitada")
     
     # Guardar configuración actualizada
     ebtables_cfg["status"] = 1
@@ -823,11 +1082,22 @@ def aislar(params: Dict[str, Any]) -> Tuple[bool, str]:
     vlan_iface_map = _build_vlan_interface_map(vlans, tagging_cfg)
     vlan_interfaces = vlan_iface_map.get(vlan_id, [])
     
+    # VALIDACIÓN 1: Verificar que la VLAN no esté ya aislada
+    already_isolated_ok, already_isolated_msg = _check_vlan_already_isolated(vlan_id, ebtables_cfg)
+    if not already_isolated_ok:
+        logger.error(f"Intento de re-aislar VLAN {vlan_id}: {already_isolated_msg}")
+        return False, already_isolated_msg
+    
     logger.info(f"Aislando VLAN {vlan_id} con interfaces: {vlan_interfaces}")
     
     # Aplicar aislamiento
     if not _apply_isolation(vlan_id, wan_iface, vlan_interfaces):
         return False, f"Error aplicando aislamiento a VLAN {vlan_id}"
+    
+    # Validación: Asegurar que al menos una interfaz está configurada
+    if not vlan_interfaces:
+        logger.warning(f"VLAN {vlan_id} aislada sin interfases (puede ser intencionado)")
+        return False, f"Error: VLAN {vlan_id} no tiene interfases configuradas. Configure interfases en tagging primero."
     
     # Actualizar configuración
     ebtables_cfg["vlans"][vlan_id_str]["isolated"] = True
@@ -887,6 +1157,194 @@ def desaislar(params: Dict[str, Any]) -> Tuple[bool, str]:
     return True, f"VLAN {vlan_id} desaislada correctamente (todo el tráfico permitido)"
 
 
+def config(params: Dict[str, Any] = None) -> Tuple[bool, str]:
+    """Gestionar configuración de ebtables (whitelist de MAC en VLAN 1).
+    
+    Acciones soportadas:
+    - action="add_mac": Agregar MAC a whitelist de VLAN 1
+      Parámetros: mac (XX:XX:XX:XX:XX:XX)
+    
+    - action="remove_mac": Remover MAC de whitelist de VLAN 1
+      Parámetros: mac (XX:XX:XX:XX:XX:XX)
+    
+    - action="enable_whitelist": Habilitar whitelist de VLAN 1
+    
+    - action="disable_whitelist": Deshabilitar whitelist de VLAN 1
+    
+    - action="show_whitelist": Mostrar MACs en whitelist de VLAN 1
+    """
+    _ensure_dirs()
+    
+    if not params:
+        return False, "Error: Parámetros requeridos"
+    
+    action = params.get("action")
+    logger.info(f"=== INICIO: ebtables config action={action} ===")
+    
+    # Cargar configuración
+    ebtables_cfg = _load_ebtables_config()
+    
+    # Verificar que ebtables esté activo (excepto para show_whitelist)
+    if action != "show_whitelist":
+        module_status = ebtables_cfg.get("status", 0)
+        if module_status != 1:
+            logger.error(f"Intento de ejecutar {action} con ebtables inactivo")
+            return False, "Error: Ebtables debe estar iniciado primero. Use 'start' para iniciar el módulo."
+    
+    # Asegurar que VLAN 1 existe con estructura completa
+    vlan_1_cfg = ebtables_cfg.get("vlans", {}).get("1", {})
+    if not vlan_1_cfg:
+        ebtables_cfg.setdefault("vlans", {})["1"] = {
+            "name": "Admin",
+            "isolated": False,
+            "mac_whitelist_enabled": True,
+            "mac_whitelist": []
+        }
+        vlan_1_cfg = ebtables_cfg["vlans"]["1"]
+    
+    # Asegurar campos de whitelist
+    if "mac_whitelist_enabled" not in vlan_1_cfg:
+        vlan_1_cfg["mac_whitelist_enabled"] = True
+    if "mac_whitelist" not in vlan_1_cfg:
+        vlan_1_cfg["mac_whitelist"] = []
+    
+    # =========================================================================
+    # ACTION: add_mac
+    # =========================================================================
+    if action == "add_mac":
+        mac = params.get("mac", "").strip()
+        
+        if not mac:
+            logger.error("Error: MAC no proporcionada")
+            return False, "Error: MAC requerida (formato: XX:XX:XX:XX:XX:XX)"
+        
+        # Validar formato de MAC
+        if not _validate_mac_address(mac):
+            logger.error(f"MAC inválida: {mac}")
+            return False, f"Error: Formato de MAC inválido: {mac}\nUse formato: XX:XX:XX:XX:XX:XX"
+        
+        # Normalizar MAC
+        mac_normalized = _normalize_mac_address(mac)
+        
+        # Verificar que no sea un duplicado
+        whitelist = vlan_1_cfg.get("mac_whitelist", [])
+        if mac_normalized in whitelist:
+            logger.warning(f"MAC ya existe en whitelist: {mac_normalized}")
+            return False, f"Error: MAC {mac_normalized} ya está en la whitelist"
+        
+        # Agregar a whitelist
+        whitelist.append(mac_normalized)
+        vlan_1_cfg["mac_whitelist"] = whitelist
+        
+        # Guardar configuración
+        _save_ebtables_config(ebtables_cfg)
+        
+        # Aplicar reglas de whitelist en ebtables
+        wan_iface = ebtables_cfg.get("wan_interface", "")
+        if not _apply_mac_whitelist_rules(1, wan_iface, whitelist):
+            logger.warning(f"Warning: MAC agregada pero no se pudieron aplicar reglas de ebtables")
+            # No fallar, solo advertencia
+        
+        logger.info(f"MAC {mac_normalized} agregada a whitelist de VLAN 1")
+        log_action("ebtables", f"add_mac {mac_normalized} - SUCCESS")
+        
+        return True, f"✅ MAC {mac_normalized} agregada a la whitelist\nTotal de MACs: {len(whitelist)}"
+    
+    # =========================================================================
+    # ACTION: remove_mac
+    # =========================================================================
+    elif action == "remove_mac":
+        mac = params.get("mac", "").strip()
+        
+        if not mac:
+            return False, "Error: MAC requerida"
+        
+        # Normalizar MAC
+        mac_normalized = _normalize_mac_address(mac)
+        
+        # Verificar que existe
+        whitelist = vlan_1_cfg.get("mac_whitelist", [])
+        if mac_normalized not in whitelist:
+            logger.warning(f"MAC no encontrada en whitelist: {mac_normalized}")
+            return False, f"Error: MAC {mac_normalized} no está en la whitelist"
+        
+        # Remover de whitelist
+        whitelist.remove(mac_normalized)
+        vlan_1_cfg["mac_whitelist"] = whitelist
+        
+        # Guardar configuración
+        _save_ebtables_config(ebtables_cfg)
+        
+        # Aplicar reglas de whitelist en ebtables
+        wan_iface = ebtables_cfg.get("wan_interface", "")
+        if not _apply_mac_whitelist_rules(1, wan_iface, whitelist):
+            logger.warning(f"Warning: MAC removida pero no se pudieron aplicar reglas de ebtables")
+            # No fallar, solo advertencia
+        
+        logger.info(f"MAC {mac_normalized} removida de whitelist de VLAN 1")
+        log_action("ebtables", f"remove_mac {mac_normalized} - SUCCESS")
+        
+        return True, f"✅ MAC {mac_normalized} removida de la whitelist\nTotal de MACs: {len(whitelist)}"
+    
+    # =========================================================================
+    # ACTION: enable_whitelist
+    # =========================================================================
+    elif action == "enable_whitelist":
+        vlan_1_cfg["mac_whitelist_enabled"] = True
+        _save_ebtables_config(ebtables_cfg)
+        
+        # Aplicar reglas de whitelist en ebtables
+        whitelist = vlan_1_cfg.get("mac_whitelist", [])
+        wan_iface = ebtables_cfg.get("wan_interface", "")
+        if not _apply_mac_whitelist_rules(1, wan_iface, whitelist):
+            logger.warning(f"Warning: Whitelist habilitada pero no se pudieron aplicar reglas de ebtables")
+            # No fallar, solo advertencia
+        
+        logger.info("MAC whitelist habilitada para VLAN 1")
+        log_action("ebtables", "enable_whitelist - SUCCESS")
+        
+        return True, "✅ Whitelist de MAC habilitada para VLAN 1"
+    
+    # =========================================================================
+    # ACTION: disable_whitelist
+    # =========================================================================
+    elif action == "disable_whitelist":
+        vlan_1_cfg["mac_whitelist_enabled"] = False
+        _save_ebtables_config(ebtables_cfg)
+        
+        # Remover reglas de whitelist de ebtables
+        if not _remove_mac_whitelist_rules(1):
+            logger.warning(f"Warning: Whitelist deshabilitada pero no se pudieron remover reglas de ebtables")
+            # No fallar, solo advertencia
+        
+        logger.info("MAC whitelist deshabilitada para VLAN 1")
+        log_action("ebtables", "disable_whitelist - SUCCESS")
+        
+        return True, "⚠️ Whitelist de MAC deshabilitada para VLAN 1 (todo el tráfico MAC permitido)"
+    
+    # =========================================================================
+    # ACTION: show_whitelist
+    # =========================================================================
+    elif action == "show_whitelist":
+        whitelist = vlan_1_cfg.get("mac_whitelist", [])
+        enabled = vlan_1_cfg.get("mac_whitelist_enabled", True)
+        
+        status_str = "✅ HABILITADA" if enabled else "⚠️ DESHABILITADA"
+        
+        if not whitelist:
+            message = f"Whitelist de MAC VLAN 1: {status_str}\nSin MACs configuradas"
+        else:
+            mac_list = "\n".join([f"  • {mac}" for mac in whitelist])
+            message = f"Whitelist de MAC VLAN 1: {status_str}\nTotal: {len(whitelist)} MACs\n\n{mac_list}"
+        
+        logger.info("Show whitelist VLAN 1")
+        return True, message
+    
+    else:
+        logger.error(f"Acción desconocida en config: {action}")
+        return False, f"Error: Acción desconocida: {action}"
+
+
 # =============================================================================
 # ACCIONES PERMITIDAS
 # =============================================================================
@@ -898,4 +1356,6 @@ ALLOWED_ACTIONS = {
     "status": status,
     "aislar": aislar,
     "desaislar": desaislar,
+    "config": config,
 }
+

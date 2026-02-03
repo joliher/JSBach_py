@@ -39,6 +39,109 @@
             margin-bottom: 20px;
             color: #0c5460;
         }
+        .warning-box {
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #856404;
+            display: none;
+        }
+        .warning-box.show {
+            display: block;
+        }
+        .error-box {
+            background: #f8d7da;
+            border: 1px solid #f5c6cb;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #721c24;
+            display: none;
+        }
+        .error-box.show {
+            display: block;
+        }
+        .success-box {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+            color: #155724;
+            display: none;
+        }
+        .success-box.show {
+            display: block;
+        }
+        
+        /* Notificación flotante */
+        #notification {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            max-width: 400px;
+            padding: 16px 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 10000;
+            font-size: 14px;
+            line-height: 1.5;
+            animation: slideIn 0.3s ease-out;
+            display: none;
+        }
+        
+        #notification.show {
+            display: block;
+        }
+        
+        #notification.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        
+        #notification.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        
+        #notification.warning {
+            background: #fff3cd;
+            color: #856404;
+            border: 1px solid #ffeeba;
+        }
+        
+        #notification.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+        }
+        
         table {
             width: 100%;
             border-collapse: collapse;
@@ -63,6 +166,9 @@
         }
         tr:hover {
             background-color: #f8f9fa;
+        }
+        tr.edit-mode {
+            background-color: #e7f3ff !important;
         }
         button {
             padding: 8px 16px;
@@ -98,6 +204,30 @@
             color: white;
         }
         .btn-save:hover {
+            background: #218838;
+            box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
+        }
+        .btn-cancel {
+            background: #999;
+            color: white;
+        }
+        .btn-cancel:hover {
+            background: #777;
+            box-shadow: 0 4px 12px rgba(119, 119, 119, 0.4);
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
             background: #218838;
             box-shadow: 0 4px 12px rgba(40, 167, 69, 0.4);
         }
@@ -177,12 +307,15 @@
     </style>
 </head>
 <body>
+    <div id="notification"></div>
     <div class="container">
         <h2>🏷️ Configuración de VLAN Tagging</h2>
 
         <div class="info-box">
-            <strong>ℹ️ Información:</strong> Configure las interfaces del bridge y sus etiquetas VLAN.
-            VLAN Untag permite tráfico sin etiquetar, mientras que VLAN Tag permite múltiples VLANs etiquetadas (separadas por comas).
+            <strong>📌 Información:</strong> Configura el tagging de VLANs en las interfaces de red. 
+            Cada interfaz puede ser <strong>UNTAGGED</strong> (acceso a una sola VLAN) o <strong>TAGGED</strong> (troncal con múltiples VLANs), 
+            pero <strong>no ambas simultáneamente</strong>. Las validaciones del backend se reflejan en tiempo real en el frontend.
+            ⚠️ Símbolos: ✅ disponible | ⚠️ en uso por ebtables.
         </div>
 
         <h3>Interfaces configuradas</h3>
@@ -191,8 +324,7 @@
             <thead>
                 <tr>
                     <th>Interface</th>
-                    <th>VLAN Untag</th>
-                    <th>VLAN Tag</th>
+                    <th>Configuración VLAN</th>
                     <th>Acciones</th>
                 </tr>
             </thead>
@@ -206,33 +338,36 @@
                 <div class="form-group">
                     <label>Nombre de la interface</label>
                     <input type="text" name="name" placeholder="eth1" required>
-                    <small>💡 Ejemplo: eth0, eth1, enp0s8, etc.</small>
+                    <small>💡 Ejemplo: eth0, eth1, enp0s8, eth_1</small>
                 </div>
 
                 <div class="form-group">
-                    <label>VLAN Untag</label>
+                    <label>VLAN Untag (Acceso)</label>
                     <input type="text" name="vlan_untag" placeholder="10">
-                    <small>💡 ID de VLAN para tráfico sin etiquetar (opcional)</small>
+                    <small>💡 ID de VLAN sin etiquetar (1-4094) - <strong>Opcional</strong> | La interfaz solo accederá a esta VLAN</small>
                 </div>
 
                 <div class="form-group">
-                    <label>VLAN Tag</label>
+                    <label>VLAN Tag (Troncal)</label>
                     <input type="text" name="vlan_tag" placeholder="1,2,3-10,12,14-15">
-                    <small>💡 IDs de VLAN para tráfico etiquetado. Soporta rangos: "1,2,3-10,12,14-15" (opcional)</small>
+                    <small>💡 IDs de VLAN etiquetadas (soporta rangos) - <strong>Opcional</strong> | La interfaz transportará múltiples VLANs</small>
                 </div>
 
                 <button type="submit" class="submit-btn">Guardar Interface</button>
             </form>
         </div>
 
-        <pre id="output"></pre>
+        <div id="output"></div>
     </div>
 
 <script>
 let taggingCache = {};
+let vlanCache = {};
+let ebtablesCache = {};
+
+// ============ FUNCIONES DE VALIDACIÓN ============
 
 function isValidInterfaceName(name) {
-    // Valida que sea alfanumérico, guiones, puntos y barras bajas
     return /^[a-zA-Z0-9._-]+$/.test(name);
 }
 
@@ -242,13 +377,10 @@ function isValidVLANId(id) {
 }
 
 function validateVLANList(vlanList) {
-    // Valida una lista de VLANs con soporta para rangos: "1,2,3-10,12,14-15"
-    // NO soporta espacios: "3-10, 12" es inválido
     if (!vlanList) return { valid: true, errors: [] };
     
     const errors = [];
     
-    // Validar que NO haya espacios
     if (/ /.test(vlanList)) {
         errors.push('No se permiten espacios. Formato válido: "1,2,3-10,12,14-15"');
         return { valid: false, errors };
@@ -262,7 +394,6 @@ function validateVLANList(vlanList) {
             return;
         }
         
-        // Verificar si es un rango
         if (part.includes('-')) {
             const rangeParts = part.split('-');
             if (rangeParts.length !== 2) {
@@ -275,7 +406,6 @@ function validateVLANList(vlanList) {
                 errors.push(`Rango inválido: "${part}" (1-4094)`);
             }
         } else {
-            // Valor individual
             if (!isValidVLANId(part)) {
                 errors.push(`${part} no es un ID de VLAN válido (1-4094)`);
             }
@@ -285,67 +415,198 @@ function validateVLANList(vlanList) {
     return { valid: errors.length === 0, errors };
 }
 
+function validateAtLeastOneVLAN(vlan_untag, vlan_tag) {
+    if (!vlan_untag && !vlan_tag) {
+        return { valid: false, error: "Debe configurar al menos VLAN Untag o VLAN Tag" };
+    }
+    return { valid: true };
+}
+
+function validateNoUNTAGandTAG(vlan_untag, vlan_tag) {
+    if (vlan_untag && vlan_tag) {
+        return { 
+            valid: false, 
+            error: `Conflicto VLAN: No se puede estar UNTAGGED en VLAN ${vlan_untag} Y TAGGED en VLANs ${vlan_tag}. Seleccione UNO:\n• UNTAG: Acceso a solo una VLAN\n• TAG: Troncal con múltiples VLANs` 
+        };
+    }
+    return { valid: true };
+}
+
+function isValidVLANExists(vlanId) {
+    return vlanCache && vlanCache[vlanId];
+}
+
+function isInterfaceUsedByEbtables(interfaceName) {
+    // Seguro contra cache no inicializado
+    if (!ebtablesCache || Object.keys(ebtablesCache).length === 0) {
+        return { used: false };
+    }
+    
+    for (let vlanId in ebtablesCache) {
+        const vlan = ebtablesCache[vlanId];
+        if (vlan && vlan.interfaces && Array.isArray(vlan.interfaces)) {
+            if (vlan.interfaces.includes(interfaceName)) {
+                return { used: true, vlanId: vlanId };
+            }
+        }
+    }
+    return { used: false };
+}
+
+async function loadAllData() {
+    try {
+        const tagResponse = await fetch("/admin/tagging", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ action: "config", params: { action: "show" } })
+        });
+        
+        if (tagResponse.ok) {
+            const tagData = await tagResponse.json();
+            taggingCache = tagData.interfaces || {};
+        }
+
+        const vlanResponse = await fetch("/admin/vlans", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ action: "config", params: { action: "show" } })
+        });
+        
+        if (vlanResponse.ok) {
+            const vlanData = await vlanResponse.json();
+            vlanCache = {};
+            if (vlanData.vlans && Array.isArray(vlanData.vlans)) {
+                vlanData.vlans.forEach(v => { vlanCache[v.vlan_id] = v; });
+            }
+        }
+
+        const ebtResponse = await fetch("/admin/ebtables", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify({ action: "config", params: { action: "show" } })
+        });
+        
+        if (ebtResponse.ok) {
+            const ebtData = await ebtResponse.json();
+            ebtablesCache = ebtData.vlans || {};
+        }
+
+        loadTagging();
+        
+    } catch (err) {
+        document.getElementById("output").textContent = "❌ Error cargando datos: " + err.message;
+    }
+}
+
+function showMessage(message) {
+    const notification = document.getElementById("notification");
+    notification.innerHTML = message.replace(/\n/g, "<br>");
+    
+    // Detectar tipo de mensaje
+    let type = "info";
+    if (message.startsWith("✅")) {
+        type = "success";
+    } else if (message.startsWith("❌")) {
+        type = "error";
+    } else if (message.startsWith("⚠️")) {
+        type = "warning";
+    }
+    
+    notification.className = `show ${type}`;
+    
+    // Auto-ocultar después de 6 segundos
+    setTimeout(() => {
+        notification.classList.remove("show");
+    }, 6000);
+}
+
 async function loadTagging() {
     try {
         const response = await fetch("/admin/tagging", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             credentials: "include",
-            body: JSON.stringify({
-                action: "config",
-                params: { action: "show" }
-            })
+            body: JSON.stringify({ action: "config", params: { action: "show" } })
         });
 
         const data = await response.json();
-        
-        if (!response.ok) {
-            document.getElementById("output").textContent = "❌ " + (data.detail || "Error cargando interfaces");
-            return;
-        }
+        const tbody = document.querySelector("tbody");
+        tbody.innerHTML = "";
 
-        // Parsear interfaces del mensaje
-        const interfaces = [];
-        const lines = data.message.split('\n');
-        for (let line of lines) {
-            const match = line.match(/Name:\s*([^,]+),\s*UNTAG:\s*([^,]*),\s*TAG:\s*(.*)/);
-            if (match) {
-                interfaces.push({
-                    name: match[1].trim(),
-                    vlan_untag: match[2].trim(),
-                    vlan_tag: match[3].trim()
-                });
+        // Parsear el mensaje de texto del backend
+        let interfaces = [];
+        
+        // Si la respuesta contiene un JSON con interfaces (array o objeto)
+        if (typeof data.message === 'object') {
+            interfaces = Array.isArray(data.message) ? data.message : Object.values(data.message || {});
+        } else if (typeof data.message === 'string') {
+            // Parsear el mensaje de texto de forma robusta
+            const lines = data.message.split('\n');
+            for (const line of lines) {
+                const trimmedLine = line.trim();
+                if (!trimmedLine) continue;
+                
+                // Intenta múltiples patrones
+                const patterns = [
+                    /Name:\s*([^,]+),\s*UNTAG:\s*([^,]*),\s*TAG:\s*(.*)/i,
+                    /([^,]+?)\s+(?:UNTAG|untag):\s*([^,]*)\s+(?:TAG|tag):\s*(.*)/,
+                    /name[:\s]+([^,]+)[,\s]+(?:untag|vlan_untag)[:\s]*([^,]*)[,\s]+(?:tag|vlan_tag)[:\s]*(.*)/i
+                ];
+                
+                let match = null;
+                for (const pattern of patterns) {
+                    match = trimmedLine.match(pattern);
+                    if (match) break;
+                }
+                
+                if (match) {
+                    interfaces.push({
+                        name: match[1].trim(),
+                        vlan_untag: match[2].trim(),
+                        vlan_tag: match[3].trim()
+                    });
+                }
             }
         }
 
-        const tbody = document.querySelector("#taggingTable tbody");
-        tbody.innerHTML = "";
-        taggingCache = {};
-
-        if (interfaces.length === 0) {
-            tbody.innerHTML = `
-                <tr>
-                    <td colspan="4">(No hay interfaces configuradas)</td>
-                </tr>
-            `;
-            document.getElementById("output").textContent = "";
+        if (!interfaces || interfaces.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: #999;">No hay interfaces configuradas</td></tr>';
             return;
         }
 
-        // Ordenar por nombre de interface
-        interfaces.sort((a, b) => a.name.localeCompare(b.name));
+        // Recargar cache como objeto indexado por nombre para compatibilidad
+        taggingCache = {};
+        interfaces.forEach(iface => {
+            taggingCache[iface.name] = iface;
+        });
 
         interfaces.forEach(iface => {
-            if (!iface.name) return;
-            taggingCache[iface.name] = iface;
-
             const tr = document.createElement("tr");
-            tr.dataset.name = iface.name;
+            tr.setAttribute("data-name", iface.name);
+            
+            let vlanInfo = "";
+            if (iface.vlan_untag) {
+                vlanInfo = `<strong>UNTAG:</strong> ${iface.vlan_untag}`;
+            }
+            if (iface.vlan_tag) {
+                if (vlanInfo) vlanInfo += "<br>";
+                vlanInfo += `<strong>TAG:</strong> ${iface.vlan_tag}`;
+            }
+
+            let statusIcon = "✅";
+            let statusHint = "";
+            const ebtUsage = isInterfaceUsedByEbtables(iface.name);
+            if (ebtUsage.used) {
+                statusIcon = "⚠️";
+                statusHint = ` (en uso por ebtables VLAN ${ebtUsage.vlanId})`;
+            }
 
             tr.innerHTML = `
-                <td>${iface.name}</td>
-                <td>${iface.vlan_untag || ""}</td>
-                <td>${iface.vlan_tag || ""}</td>
+                <td>${statusIcon} ${iface.name}${statusHint}</td>
+                <td>${vlanInfo}</td>
                 <td>
                     <button class="btn-edit" onclick="editRow('${iface.name}')">Modificar</button>
                     <button class="btn-delete" onclick="deleteIface('${iface.name}')">Eliminar</button>
@@ -358,7 +619,7 @@ async function loadTagging() {
         document.getElementById("output").textContent = "";
 
     } catch (err) {
-        document.getElementById("output").textContent = "Error: " + err.message;
+        showMessage("❌ Error: " + err.message);
     }
 }
 
@@ -366,10 +627,21 @@ function editRow(name) {
     const tr = document.querySelector(`tr[data-name="${name}"]`);
     const iface = taggingCache[name];
 
+    if (!tr || !iface) {
+        return;
+    }
+
+    tr.classList.add('edit-mode');
     tr.innerHTML = `
         <td>${iface.name}</td>
-        <td><input type="text" value="${iface.vlan_untag || ""}"></td>
-        <td><input type="text" value="${iface.vlan_tag || ""}"></td>
+        <td>
+            <label style="display: block; margin-bottom: 8px;">
+                UNTAG: <input type="text" id="edit_untag_${name}" value="${iface.vlan_untag || ''}" placeholder="1-4094">
+            </label>
+            <label>
+                TAG: <input type="text" id="edit_tag_${name}" value="${iface.vlan_tag || ''}" placeholder="1,2,3-10">
+            </label>
+        </td>
         <td>
             <button class="btn-save" onclick="saveRow('${name}')">Guardar</button>
             <button class="btn-cancel" onclick="cancelEdit()">Cancelar</button>
@@ -379,34 +651,47 @@ function editRow(name) {
 
 async function saveRow(name) {
     const tr = document.querySelector(`tr[data-name="${name}"]`);
-    const inputs = tr.querySelectorAll("input");
-    let [vlan_untag, vlan_tag] = Array.from(inputs).map(i => i.value.trim());
-    const output = document.getElementById("output");
-
+    const iface = taggingCache[name];
+    
+    let vlan_untag = (document.getElementById(`edit_untag_${name}`)?.value || "").trim();
+    let vlan_tag = (document.getElementById(`edit_tag_${name}`)?.value || "").trim();
+    
     vlan_untag = vlan_untag === "" ? "" : vlan_untag;
     vlan_tag = vlan_tag === "" ? "" : vlan_tag;
 
-    // Validar VLAN Untag si se proporciona
     if (vlan_untag) {
         if (!isValidVLANId(vlan_untag)) {
-            output.textContent = `❌ Error: VLAN Untag ${vlan_untag} no es válida. Debe estar entre 1 y 4094.`;
+            showMessage(`❌ Error: VLAN Untag ${vlan_untag} no es válida. Debe estar entre 1 y 4094.`);
             return;
+        }
+        if (!isValidVLANExists(vlan_untag)) {
+            showMessage(`⚠️ VLAN ${vlan_untag} no existe en vlans.json. Considere crearla primero.`);
         }
     }
 
-    // Validar VLAN Tag si se proporciona
     if (vlan_tag) {
         const validation = validateVLANList(vlan_tag);
         if (!validation.valid) {
-            output.textContent = `❌ Error en VLAN Tag: ${validation.errors.join(", ")}`;
+            showMessage(`❌ Error en VLAN Tag: ${validation.errors.join(", ")}`);
             return;
         }
     }
 
-    // Al menos una VLAN debe estar configurada
-    if (!vlan_untag && !vlan_tag) {
-        output.textContent = "❌ Error: Debe configurar al menos VLAN Untag o VLAN Tag";
+    const atLeastOne = validateAtLeastOneVLAN(vlan_untag, vlan_tag);
+    if (!atLeastOne.valid) {
+        showMessage(`❌ Error: ${atLeastOne.error}`);
         return;
+    }
+
+    const noConflict = validateNoUNTAGandTAG(vlan_untag, vlan_tag);
+    if (!noConflict.valid) {
+        showMessage(`❌ Error: ${noConflict.error}`);
+        return;
+    }
+
+    const ebtUsage = isInterfaceUsedByEbtables(name);
+    if (ebtUsage.used) {
+        showMessage(`⚠️ Advertencia: Interfaz ${name} está siendo usada por ebtables en VLAN ${ebtUsage.vlanId}. Modifique con cuidado.`);
     }
 
     try {
@@ -428,15 +713,15 @@ async function saveRow(name) {
         const data = await response.json();
         
         if (!response.ok) {
-            output.textContent = "❌ " + (data.detail || data.message || "Error desconocido");
+            showMessage("❌ " + (data.detail || data.message || "Error desconocido"));
             return;
         }
 
-        output.textContent = "✅ " + (data.message || "Interfaz guardada exitosamente");
-        loadTagging();
+        showMessage("✅ " + (data.message || "Interfaz guardada exitosamente"));
+        loadAllData();
 
     } catch (err) {
-        output.textContent = "❌ Error: " + err.message;
+        showMessage("❌ Error: " + err.message);
     }
 }
 
@@ -445,7 +730,14 @@ function cancelEdit() {
 }
 
 async function deleteIface(name) {
-    if (!confirm(`¿Eliminar interface ${name}?`)) return;
+    const ebtUsage = isInterfaceUsedByEbtables(name);
+    if (ebtUsage.used) {
+        if (!confirm(`⚠️ ADVERTENCIA: Esta interfaz está siendo usada por ebtables en VLAN ${ebtUsage.vlanId}.\n\n¿Desea continuar con la eliminación?`)) {
+            return;
+        }
+    }
+
+    if (!confirm(`¿Eliminar interfaz ${name}?`)) return;
 
     try {
         const response = await fetch("/admin/tagging", {
@@ -464,15 +756,15 @@ async function deleteIface(name) {
         const data = await response.json();
         
         if (!response.ok) {
-            document.getElementById("output").textContent = "❌ " + (data.detail || data.message || "Error eliminando interfaz");
+            showMessage("❌ " + (data.detail || data.message || "Error eliminando interfaz"));
         } else {
-            document.getElementById("output").textContent = "✅ " + (data.message || "Interfaz eliminada exitosamente");
+            showMessage("✅ " + (data.message || "Interfaz eliminada exitosamente"));
         }
 
-        loadTagging();
+        loadAllData();
 
     } catch (err) {
-        document.getElementById("output").textContent = "❌ Error: " + err.message;
+        showMessage("❌ Error: " + err.message);
     }
 }
 
@@ -483,43 +775,48 @@ document.getElementById("taggingForm").addEventListener("submit", async (e) => {
     const name = form.name.value.trim();
     let vlan_untag = form.vlan_untag.value.trim();
     let vlan_tag = form.vlan_tag.value.trim();
-    const output = document.getElementById("output");
 
-    // Validar nombre de interfaz
     if (!name) {
-        output.textContent = "❌ Error: Nombre de interfaz no puede estar vacío";
+        showMessage("❌ Error: Nombre de interfaz no puede estar vacío");
         return;
     }
 
     if (!isValidInterfaceName(name)) {
-        output.textContent = "❌ Error: Formato de interfaz inválido. Use caracteres alfanuméricos, guiones, puntos o barras bajas (ej: eth0, enp0s8, eth_1).";
+        showMessage("❌ Error: Formato de interfaz inválido. Use caracteres alfanuméricos, guiones, puntos o barras bajas.");
         return;
     }
 
-    // Normalizar valores vacíos
+    // No normalizar a string vacío, dejar como está para el backend
     vlan_untag = vlan_untag === "" ? "" : vlan_untag;
     vlan_tag = vlan_tag === "" ? "" : vlan_tag;
 
-    // Validar VLAN Untag si se proporciona
     if (vlan_untag) {
         if (!isValidVLANId(vlan_untag)) {
-            output.textContent = `❌ Error: VLAN Untag ${vlan_untag} no es válida. Debe estar entre 1 y 4094.`;
+            showMessage(`❌ Error: VLAN Untag ${vlan_untag} no es válida. Debe estar entre 1 y 4094.`);
             return;
+        }
+        if (!isValidVLANExists(vlan_untag)) {
+            showMessage(`⚠️ VLAN ${vlan_untag} no existe en vlans.json. Considere crearla primero.`);
         }
     }
 
-    // Validar VLAN Tag si se proporciona
     if (vlan_tag) {
         const validation = validateVLANList(vlan_tag);
         if (!validation.valid) {
-            output.textContent = `❌ Error en VLAN Tag: ${validation.errors.join(", ")}`;
+            showMessage(`❌ Error en VLAN Tag: ${validation.errors.join(", ")}`);
             return;
         }
     }
 
-    // Al menos una VLAN debe estar configurada
-    if (!vlan_untag && !vlan_tag) {
-        output.textContent = "❌ Error: Debe configurar al menos VLAN Untag o VLAN Tag";
+    const atLeastOne = validateAtLeastOneVLAN(vlan_untag, vlan_tag);
+    if (!atLeastOne.valid) {
+        showMessage(`❌ Error: ${atLeastOne.error}`);
+        return;
+    }
+
+    const noConflict = validateNoUNTAGandTAG(vlan_untag, vlan_tag);
+    if (!noConflict.valid) {
+        showMessage(`❌ Error: ${noConflict.error}`);
         return;
     }
 
@@ -542,21 +839,22 @@ document.getElementById("taggingForm").addEventListener("submit", async (e) => {
         const data = await response.json();
         
         if (!response.ok) {
-            output.textContent = "❌ " + (data.detail || data.message || "Error desconocido");
+            const errorMsg = data.detail || data.message || "Error desconocido";
+            showMessage("❌ " + errorMsg);
             return;
         }
 
-        output.textContent = "✅ " + (data.message || "Interfaz guardada exitosamente");
+        showMessage("✅ " + (data.message || "Interfaz guardada exitosamente"));
 
         form.reset();
-        loadTagging();
+        loadAllData();
 
     } catch (err) {
-        output.textContent = "❌ Error: " + err.message;
+        showMessage("❌ Error: " + err.message);
     }
 });
 
-loadTagging();
+loadAllData();
 </script>
 
 </body>

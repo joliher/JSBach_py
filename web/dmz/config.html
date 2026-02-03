@@ -168,7 +168,6 @@
                 
                 return isActive;
             } catch (err) {
-                console.error('Error verificando firewall:', err);
                 firewallWarning.style.display = 'block';
                 form.querySelector('button[type="submit"]').disabled = true;
                 return false;
@@ -192,7 +191,6 @@
                 const response = await fetch('/admin/config/vlans/vlans.json');
                 
                 if (!response.ok) {
-                    console.error('No se pudo cargar vlans.json');
                     return null;
                 }
                 
@@ -201,13 +199,11 @@
                 // Buscar la VLAN 2 (DMZ)
                 const dmzVlan = vlansData.vlans.find(v => v.id === 2);
                 if (!dmzVlan || !dmzVlan.ip) {
-                    console.error('No se encontró VLAN 2 (DMZ)');
                     return null;
                 }
                 
                 return dmzVlan.ip; // Retorna algo como "192.168.2.1/25"
             } catch (err) {
-                console.error('Error obteniendo red DMZ:', err);
                 return null;
             }
         }
@@ -235,7 +231,6 @@
                 // Verificar que tanto la red como el broadcast de la IP estén dentro de la DMZ
                 return ipNetwork >= networkAddr && ipBroadcast <= broadcastAddr;
             } catch (err) {
-                console.error('Error validando IP:', err);
                 return false;
             }
         }
@@ -298,7 +293,6 @@
                     }
                 }
             } catch (err) {
-                console.error('Error verificando puertos en uso:', err);
                 // Continuar con la validación del backend
             }
             

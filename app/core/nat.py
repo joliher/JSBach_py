@@ -2,6 +2,7 @@
 
 import os
 import re
+import json
 from typing import Dict, Any, Tuple, Optional
 from ..utils.global_functions import create_module_config_directory, create_module_log_directory
 from ..utils.validators import validate_ip_address, validate_port, validate_protocol, sanitize_interface_name

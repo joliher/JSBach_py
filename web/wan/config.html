@@ -116,6 +116,21 @@
             border-radius: 4px;
             margin-top: 5px;
         }
+        .dhcp-notice {
+            background: #d1ecf1;
+            border: 1px solid #bee5eb;
+            color: #0c5460;
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 12px;
+            font-size: 13px;
+            line-height: 1.6;
+            text-align: justify;
+        }
+        .dhcp-notice strong {
+            display: block;
+            margin-bottom: 6px;
+        }
     </style>
 </head>
 <body>
@@ -125,6 +140,10 @@
         <div class="wan-info-box" id="wan-info-container" style="display: none;">
             <strong>🌐 Interfaz WAN Configurada:</strong>
             <div class="wan-details" id="wan-details"></div>
+            <div class="dhcp-notice" id="dhcp-notice" style="display: none;">
+                <strong>⏱️ Obtención de IP por DHCP</strong><br>
+                El proceso DHCP puede tardar <b>aproximadamente 30 segundos</b> en obtener una dirección IP de tu proveedor de internet. Si después de este tiempo no aparece una IP asignada, significa que el proceso ha <b>fallado</b> y deberás verificar la conexión física.
+            </div>
         </div>
 
         <div class="warning-box">
@@ -255,13 +274,16 @@ async function loadWanConfiguration() {
             
             let details = `${wanInterface} (Modo: ${wanMode}, Estado: ${wanStatus})`;
             
-            // Si hay error de DHCP, mostrarlo en el detalle
-            if (wanConfig.dhcp_error) {
-                details += `\n⚠️ DHCP Error: ${wanConfig.dhcp_error}`;
-            }
-            
             document.getElementById("wan-details").textContent = details;
             document.getElementById("wan-info-container").style.display = "block";
+            
+            // Mostrar aviso de DHCP si el modo es DHCP
+            const dhcpNotice = document.getElementById("dhcp-notice");
+            if (wanMode === "dhcp") {
+                dhcpNotice.style.display = "block";
+            } else {
+                dhcpNotice.style.display = "none";
+            }
             
             // Pre-rellenar el formulario con la configuración actual
             if (wanInterface !== "No configurada") {
@@ -281,7 +303,6 @@ async function loadWanConfiguration() {
             }
         }
     } catch (err) {
-        console.error("Error cargando configuración WAN:", err);
     }
 }
 
@@ -293,6 +314,14 @@ modeSelect.addEventListener("change", () => {
         "hidden",
         modeSelect.value !== "manual"
     );
+    
+    // Mostrar/ocultar aviso DHCP según el modo seleccionado
+    const dhcpNotice = document.getElementById("dhcp-notice");
+    if (modeSelect.value === "dhcp") {
+        dhcpNotice.style.display = "block";
+    } else {
+        dhcpNotice.style.display = "none";
+    }
 });
 
 form.addEventListener("submit", async (e) => {

@@ -13,7 +13,7 @@
             min-height: 100vh;
         }
         .container {
-            max-width: 1000px;
+            max-width: 1200px;
             margin: 0 auto;
             background: white;
             border-radius: 15px;
@@ -27,16 +27,16 @@
             align-items: center;
             gap: 10px;
         }
+        h2 {
+            color: #764ba2;
+            margin-bottom: 15px;
+            font-size: 1.3em;
+        }
         .section {
             background: #f8f9fa;
             border-radius: 10px;
             padding: 20px;
             margin-bottom: 20px;
-        }
-        .section h2 {
-            color: #764ba2;
-            margin-bottom: 15px;
-            font-size: 1.3em;
         }
         .vlan-list {
             display: grid;
@@ -100,6 +100,22 @@
             background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
             color: white;
         }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
         .btn:hover {
             transform: translateY(-2px);
             box-shadow: 0 4px 8px rgba(0,0,0,0.2);
@@ -108,6 +124,10 @@
             opacity: 0.5;
             cursor: not-allowed;
             transform: none;
+        }
+        .btn-sm {
+            padding: 5px 10px;
+            font-size: 12px;
         }
         .loading {
             display: flex;
@@ -148,6 +168,102 @@
             border-left: 4px solid #155724;
             color: #155724;
         }
+        .alert-danger {
+            background: #f8d7da;
+            border-left: 4px solid #721c24;
+            color: #721c24;
+        }
+
+        /* MAC Whitelist Styles */
+        .mac-whitelist-section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            border-left: 4px solid #667eea;
+        }
+        .mac-whitelist-section h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .whitelist-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        .whitelist-status .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #38ef7d;
+        }
+        .whitelist-status.disabled .status-indicator {
+            background: #eb3349;
+        }
+        .whitelist-status p {
+            margin: 0;
+            color: #666;
+        }
+        .whitelist-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            align-items: flex-end;
+        }
+        .mac-input-group {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            align-items: flex-end;
+        }
+        .mac-input-group input {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        .mac-input-group input::placeholder {
+            color: #999;
+        }
+        .mac-list {
+            display: grid;
+            gap: 8px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .mac-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: #f8f9fa;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+        }
+        .mac-item .mac-addr {
+            color: #333;
+            font-weight: 500;
+        }
+        .mac-item button {
+            padding: 4px 10px;
+            font-size: 11px;
+        }
+        .mac-list-empty {
+            text-align: center;
+            padding: 20px;
+            color: #999;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -167,6 +283,16 @@
                 <div class="loading">
                     <div class="spinner"></div>
                     <span>Cargando VLANs...</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>🔐 Whitelist de MAC - VLAN 1 (Admin)</h2>
+            <div id="macWhitelistContainer">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <span>Cargando configuración de whitelist...</span>
                 </div>
             </div>
         </div>
@@ -271,6 +397,172 @@
             }
         }
 
+        async function loadMacWhitelist() {
+            const container = document.getElementById('macWhitelistContainer');
+            
+            try {
+                // Obtener configuración de ebtables
+                const ebtablesResponse = await fetch('/admin/config/ebtables/ebtables.json', {
+                    credentials: 'include'
+                });
+                const ebtablesData = await ebtablesResponse.json();
+                
+                // Obtener configuración de VLAN 1
+                const vlan1Config = ebtablesData.vlans?.['1'] || {
+                    mac_whitelist_enabled: true,
+                    mac_whitelist: []
+                };
+                
+                const isEnabled = vlan1Config.mac_whitelist_enabled !== false;
+                const whitelist = vlan1Config.mac_whitelist || [];
+                
+                // Construir HTML
+                let html = `
+                    <div class="mac-whitelist-section">
+                        <h3>🔐 Whitelist de MAC para VLAN 1</h3>
+                        
+                        <div class="whitelist-status ${!isEnabled ? 'disabled' : ''}">
+                            <span class="status-indicator"></span>
+                            <p>${isEnabled ? '✅ Whitelist HABILITADA' : '⚠️ Whitelist DESHABILITADA'}</p>
+                        </div>
+                        
+                        ${!isEnabled ? '<div class="alert alert-warning">⚠️ La whitelist está deshabilitada. Todas las MACs pueden comunicarse.</div>' : ''}
+                        
+                        <div class="whitelist-controls">
+                            <div class="mac-input-group">
+                                <input type="text" id="macInput" placeholder="Ej: AA:BB:CC:DD:EE:FF" 
+                                       ${!isEnabled ? 'disabled' : ''}>
+                                <button class="btn btn-success btn-sm" onclick="addMac()" ${!isEnabled ? 'disabled' : ''}>
+                                    ➕ Agregar
+                                </button>
+                            </div>
+                            <button class="btn btn-secondary btn-sm" onclick="toggleWhitelist()">
+                                ${isEnabled ? '🔒 Deshabilitar' : '🔓 Habilitar'}
+                            </button>
+                        </div>
+                        
+                        <h4 style="margin-top: 20px; margin-bottom: 10px; color: #333;">MACs en la Whitelist (${whitelist.length})</h4>
+                        <div class="mac-list">
+                            ${whitelist.length === 0 ? 
+                                '<div class="mac-list-empty">Sin MACs configuradas</div>' :
+                                whitelist.map(mac => `
+                                    <div class="mac-item">
+                                        <span class="mac-addr">${escapeHtml(mac)}</span>
+                                        <button class="btn btn-danger btn-sm" onclick="removeMac('${escapeHtml(mac)}')">
+                                            ❌ Remover
+                                        </button>
+                                    </div>
+                                `).join('')
+                            }
+                        </div>
+                    </div>
+                `;
+                
+                container.innerHTML = html;
+                
+            } catch (error) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 30px; color: #eb3349;">
+                        ❌ Error al cargar whitelist: ${escapeHtml(error.message)}
+                    </div>
+                `;
+            }
+        }
+
+        async function addMac() {
+            const macInput = document.getElementById('macInput');
+            const mac = macInput.value.trim();
+            
+            if (!mac) {
+                showMessage('Error: Ingrese una dirección MAC', 'danger');
+                return;
+            }
+            
+            // Validar formato básico
+            if (!/^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$/.test(mac)) {
+                showMessage('Error: Formato de MAC inválido. Use: XX:XX:XX:XX:XX:XX', 'danger');
+                return;
+            }
+            
+            await executeConfigAction('add_mac', { mac: mac });
+            macInput.value = '';
+        }
+
+        async function removeMac(mac) {
+            if (!confirm(`¿Remover MAC ${mac} de la whitelist?`)) {
+                return;
+            }
+            
+            await executeConfigAction('remove_mac', { mac: mac });
+        }
+
+        async function toggleWhitelist() {
+            // Obtener estado actual
+            const ebtablesResponse = await fetch('/admin/config/ebtables/ebtables.json', {
+                credentials: 'include'
+            });
+            const ebtablesData = await ebtablesResponse.json();
+            const vlan1Config = ebtablesData.vlans?.['1'] || { mac_whitelist_enabled: true };
+            const isEnabled = vlan1Config.mac_whitelist_enabled !== false;
+            
+            const action = isEnabled ? 'disable_whitelist' : 'enable_whitelist';
+            await executeConfigAction(action, {});
+        }
+
+        async function executeConfigAction(action, params) {
+            const messageContainer = document.getElementById('messageContainer');
+            messageContainer.innerHTML = `
+                <div class="alert alert-info">
+                    ⏳ Procesando ${action}...
+                </div>
+            `;
+            
+            try {
+                const response = await fetch('/admin/ebtables', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        action: 'config',
+                        params: {
+                            action: action,
+                            ...params
+                        }
+                    }),
+                    credentials: 'include'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    messageContainer.innerHTML = `
+                        <div class="alert alert-success">
+                            ✅ ${escapeHtml(data.message)}
+                        </div>
+                    `;
+                    // Recargar whitelist
+                    setTimeout(loadMacWhitelist, 800);
+                } else {
+                    messageContainer.innerHTML = `
+                        <div class="alert alert-danger">
+                            ❌ ${escapeHtml(data.message)}
+                        </div>
+                    `;
+                }
+                
+                // Limpiar mensaje después de 5 segundos
+                setTimeout(() => {
+                    messageContainer.innerHTML = '';
+                }, 5000);
+                
+            } catch (error) {
+                messageContainer.innerHTML = `
+                    <div class="alert alert-danger">
+                        ❌ Error: ${escapeHtml(error.message)}
+                    </div>
+                `;
+            }
+        }
+
         async function isolateVlan(vlanId) {
             if (!confirm(`¿Confirma que desea AISLAR la VLAN ${vlanId}?\n\nSolo podrá comunicarse con la WAN.`)) {
                 return;
@@ -320,8 +612,8 @@
                     setTimeout(loadVlans, 1000);
                 } else {
                     messageContainer.innerHTML = `
-                        <div class="alert alert-warning">
-                            ⚠️ ${escapeHtml(data.message)}
+                        <div class="alert alert-danger">
+                            ❌ ${escapeHtml(data.message)}
                         </div>
                     `;
                 }
@@ -333,11 +625,21 @@
                 
             } catch (error) {
                 messageContainer.innerHTML = `
-                    <div class="alert alert-warning">
+                    <div class="alert alert-danger">
                         ❌ Error al ejecutar acción: ${escapeHtml(error.message)}
                     </div>
                 `;
             }
+        }
+
+        function showMessage(message, type = 'info') {
+            const messageContainer = document.getElementById('messageContainer');
+            const alertClass = `alert alert-${type}`;
+            const icon = type === 'success' ? '✅' : (type === 'danger' ? '❌' : 'ℹ️');
+            messageContainer.innerHTML = `<div class="${alertClass}">${icon} ${escapeHtml(message)}</div>`;
+            setTimeout(() => {
+                messageContainer.innerHTML = '';
+            }, 5000);
         }
 
         function escapeHtml(text) {
@@ -346,8 +648,11 @@
             return div.innerHTML;
         }
 
-        // Cargar VLANs al iniciar
-        window.addEventListener('DOMContentLoaded', loadVlans);
+        // Cargar al iniciar
+        window.addEventListener('DOMContentLoaded', () => {
+            loadVlans();
+            loadMacWhitelist();
+        });
     </script>
 </body>
 </html>

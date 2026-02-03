@@ -412,6 +412,15 @@ def config(params: Dict[str, Any]) -> Tuple[bool, str]:
         vlan_untag = params.get("vlan_untag", "")
         vlan_tag = params.get("vlan_tag", "")
         
+        # Validación INICIAL: Al menos uno de UNTAG o TAG debe ser proporcionado
+        if not vlan_untag and not vlan_tag:
+            return False, (
+                f"❌ Error de configuración en interfaz {name}: "
+                f"Debe proporcionar UNTAG o TAG (o ambos para validar conflicto).\n"
+                f"  • UNTAG: Acceso a una sola VLAN (vlan_untag: '1')\n"
+                f"  • TAG: Troncal con múltiples VLANs (vlan_tag: '10,20,30')"
+            )
+        
         # Validar vlan_untag si se proporciona
         if vlan_untag:
             if not isinstance(vlan_untag, (str, int)):
@@ -464,6 +473,42 @@ def config(params: Dict[str, Any]) -> Tuple[bool, str]:
                     if tag_id not in configured_vlan_ids:
                         return False, f"Error: VLAN {tag_id} no existe en el sistema. Configure la VLAN primero con el módulo VLANs."
         
+        # ===== VALIDACIÓN DE CONFLICTO UNTAG/TAG =====
+        # Una interfaz NO puede ser UNTAGGED en una VLAN Y TAGGED en otras
+        if vlan_untag and vlan_tag:
+            return False, (
+                f"❌ Conflicto de configuración VLAN en interfaz {name}: "
+                f"No puede estar UNTAGGED en VLAN {vlan_untag} Y TAGGED en VLANs {vlan_tag}. "
+                f"Una interfaz debe estar en UNO u OTRO modo:\n"
+                f"  • UNTAG: Acceso a solo una VLAN (vlan_untag: '{vlan_untag}')\n"
+                f"  • TAG: Troncal con múltiples VLANs (vlan_tag: '{vlan_tag}')"
+            )
+        
+        # VALIDACIÓN: Si interfaz ya existe en ebtables con config incompatible, rechazar reconfiguración
+        ebtables_cfg_path = os.path.join(os.path.dirname(CONFIG_FILE), "..", "ebtables", "ebtables.json")
+        existing_iface = next((i for i in cfg["interfaces"] if i.get("name") == name), None)
+        
+        if existing_iface and os.path.exists(ebtables_cfg_path):
+            try:
+                with open(ebtables_cfg_path, 'r') as f:
+                    ebtables_cfg = json.load(f)
+                    # Buscar si esta interfaz está siendo usada
+                    for vlan_id, vlan_data in ebtables_cfg.items():
+                        if vlan_id == "status":
+                            continue
+                        interfaces = vlan_data.get("interfaces", [])
+                        if name in interfaces:
+                            # Interfaz está siendo usada en aislar
+                            # Si la configuración actual y la nueva son incompatibles, rechazar
+                            old_vlan_untag = existing_iface.get("vlan_untag", "")
+                            if old_vlan_untag != vlan_untag or vlan_tag:
+                                return False, (
+                                    f"❌ Error: Interfaz {name} está siendo usada por ebtables VLAN {vlan_id}. "
+                                    f"Primero desaísla VLAN {vlan_id} antes de cambiar la configuración."
+                                )
+            except Exception:
+                pass  # Si falla la lectura, permitir reconfiguración
+        
         # Eliminar si ya existía la interfaz
         cfg["interfaces"] = [i for i in cfg["interfaces"] if i.get("name") != name]
         
@@ -471,7 +516,7 @@ def config(params: Dict[str, Any]) -> Tuple[bool, str]:
         cfg["interfaces"].append({
             "name": name,
             "vlan_untag": str(vlan_untag) if vlan_untag else "",
-            "vlan_tag": vlan_tag
+            "vlan_tag": str(vlan_tag) if vlan_tag else ""
         })
         _save_config(cfg)
         return True, f"Interfaz {name} agregada"
@@ -488,6 +533,25 @@ def config(params: Dict[str, Any]) -> Tuple[bool, str]:
         
         if not name:
             return False, "Error: 'name' no puede estar vacío"
+        
+        # VALIDACIÓN: Verificar que la interfaz no esté siendo usada por ebtables
+        ebtables_cfg_path = os.path.join(os.path.dirname(CONFIG_FILE), "..", "ebtables", "ebtables.json")
+        if os.path.exists(ebtables_cfg_path):
+            try:
+                with open(ebtables_cfg_path, 'r') as f:
+                    ebtables_cfg = json.load(f)
+                    # Buscar si esta interfaz está en alguna VLAN aislada
+                    for vlan_id, vlan_data in ebtables_cfg.items():
+                        if vlan_id == "status":
+                            continue
+                        interfaces = vlan_data.get("interfaces", [])
+                        if name in interfaces:
+                            return False, (
+                                f"❌ Error: Interfaz {name} está siendo usada por ebtables en VLAN {vlan_id}. "
+                                f"Primero desaísla VLAN {vlan_id} usando: ebtables desaislar {{'vlan_id': {vlan_id}}}"
+                            )
+            except Exception:
+                pass  # Si falla la lectura, permitir eliminación
         
         original_count = len(cfg["interfaces"])
         cfg["interfaces"] = [i for i in cfg["interfaces"] if i.get("name") != name]

@@ -388,11 +388,6 @@ tagging config {"action": "add", "name": "eth1", "vlan_untag": "10", "vlan_tag":
 tagging config {"action": "add", "name": "eth2", "vlan_untag": "", "vlan_tag": "10,20,30"}
 ```
 
-#### Añadir interfaz mixta (UNTAG + TAG)
-```bash
-tagging config {"action": "add", "name": "eth3", "vlan_untag": "10", "vlan_tag": "20,30"}
-```
-
 #### Eliminar interfaz
 ```bash
 tagging config {"action": "remove", "name": "eth1"}
@@ -402,6 +397,11 @@ tagging config {"action": "remove", "name": "eth1"}
 ```bash
 tagging config {"action": "show"}
 ```
+
+**NOTA**: Una interfaz NO puede estar UNTAGGED en una VLAN Y TAGGED en otras simultáneamente.
+          Debe elegir UNO de estos modos:
+          - UNTAG: Acceso a una sola VLAN (vlan_untag: "10")
+          - TAG:   Troncal con múltiples VLANs (vlan_tag: "10,20,30")
 
 ---
 
