@@ -284,7 +284,8 @@ def _delete_vlan_chain(vlan_id: int) -> bool:
     if not success:
         return True  # No existe, no hay que hacer nada
     
-    # Flush de reglas primero
+    # Flush de reglas primero (elimina todas: WAN ACCEPT y DROP)
+    logger.info(f"Eliminando reglas de {chain_name} (WAN ACCEPT y DROP)...")
     _run_ebtables(["-F", chain_name])
     
     # Eliminar referencias en FORWARD (todas las que redireccionan a esta cadena)
@@ -374,7 +375,7 @@ def _apply_isolation(vlan_id: int, wan_iface: str, vlan_interfaces: List[str]) -
     FORWARD_VLAN_X:
       -i <interfaz_wan> -j ACCEPT              (permite entrada WAN)
       -o <interfaz_wan> -j ACCEPT              (permite salida WAN)
-      (DROP implícito por default)
+      -j DROP                                   (bloquea todo lo demás - aislamiento entre VLANs)
     
     Args:
         vlan_id: ID de la VLAN
@@ -423,6 +424,34 @@ def _apply_isolation(vlan_id: int, wan_iface: str, vlan_interfaces: List[str]) -
     else:
         logger.info(f"Regla {chain_name} -o {wan_iface} -j ACCEPT ya existe")
     
+    # Regla 3: DROP explícito para todo lo demás (bloqueo entre VLANs)
+    # Insertar en posición 3 para asegurar orden correcto
+    verify_success, verify_output = _run_ebtables(["-L", chain_name, "--Ln"])
+    # Contar líneas de reglas existentes (excluyendo header)
+    existing_rules = 0
+    if verify_success:
+        lines = [l for l in verify_output.strip().split('\n') if l and not l.startswith('Bridge')]
+        existing_rules = len(lines)
+    
+    # Verificar si ya existe una regla DROP
+    drop_exists = verify_success and "-j DROP" in verify_output
+    
+    if not drop_exists:
+        # Insertar en posición 3 si hay 2 o más reglas, de lo contrario append
+        if existing_rules >= 2:
+            success, msg = _run_ebtables(["-I", chain_name, "3", "-j", "DROP"])
+            position_msg = "en posición 3"
+        else:
+            success, msg = _run_ebtables(["-A", chain_name, "-j", "DROP"])
+            position_msg = "al final"
+        
+        if not success:
+            logger.error(f"Error añadiendo regla DROP en {chain_name}: {msg}")
+            return False
+        logger.info(f"Regla {chain_name} -j DROP añadida {position_msg}")
+    else:
+        logger.info(f"Regla {chain_name} -j DROP ya existe")
+    
     # Agregar reglas en FORWARD que redireccionen cada interfaz VLAN a esta cadena
     for i, phys_iface in enumerate(vlan_interfaces, start=1):
         if not _add_vlan_interface_to_forward(vlan_id, phys_iface, position=i):
@@ -453,8 +482,8 @@ def _remove_isolation(vlan_id: int, vlan_interfaces: List[str] = None) -> bool:
                 else:
                     logger.error(f"Error eliminando regla FORWARD para {iface}: {msg}")
     
-    # Siempre intentar hacer flush de la cadena (elimina todas las reglas dentro)
-    logger.info(f"Eliminando todas las reglas de {chain_name}...")
+    # Siempre intentar hacer flush de la cadena (elimina todas las reglas dentro, incluyendo DROP)
+    logger.info(f"Eliminando todas las reglas de {chain_name} (incluye WAN ACCEPT y DROP)...")
     success, msg = _run_ebtables(["-F", chain_name])
     
     if success:
