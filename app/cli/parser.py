@@ -1,4 +1,3 @@
-
 """
 Parser de comandos para la CLI
 Parsea la entrada del usuario y valida los comandos
@@ -28,12 +27,6 @@ class CommandParser:
         """
         Parsea una línea de comando en sus componentes
         Formato: <módulo> <acción> [--clave valor ...]
-        Ejemplos:
-            wan status
-            nat start
-            firewall add_rule --vlan_id 1 --target ACCEPT
-            ebtables add_mac --mac AA:BB:CC:DD:EE:FF
-            dmz add_destination --ip 10.0.2.5 --port 80
         """
         if not command_line.strip():
             raise ValueError("Comando vacío")
@@ -56,7 +49,7 @@ class CommandParser:
         
         # Comandos de módulo
         if len(parts) < 2:
-            return self._invalid_command_message(parts[0] if parts else None)
+            return f"❌ Uso: {parts[0].lower()} <acción> [parámetros]"
 
         module = parts[0].lower()
         action = parts[1].lower()
@@ -82,6 +75,7 @@ class CommandParser:
             else:
                 params[key] = True
                 i += 1
+                
         return {
             'command': 'module_action',
             'module': module,
@@ -89,7 +83,74 @@ class CommandParser:
             'params': params
         }
 
-    # --- AYUDA DE MÓDULO O ACCIÓN ---
+    def _apply_colors(self, text: str) -> str:
+        """
+        Aplica colores ANSI al texto de ayuda.
+        Base: Azul (\033[94m)
+        Resaltado: Verde (\033[92m)
+        Valores Variables: Blanco (\033[0m)
+        """
+        GREEN = "\033[92m"
+        BLUE = "\033[94m"
+        WHITE = "\033[0m"
+        RESET = "\033[0m"
+        
+        lines = text.split('\n')
+        colored_lines = []
+        modules_pat = '|'.join(self.MODULES)
+        
+        for line in lines:
+            # 1. Detectar si es una línea de ejemplo de comando
+            # Formato: [espacios][módulo] [acción] [parámetros...]
+            match_example = re.match(r'^(\s{2})(' + modules_pat + r')\s+([\w-]+)(.*)$', line)
+            
+            if match_example:
+                indent = match_example.group(1)
+                module = match_example.group(2)
+                action = match_example.group(3)
+                rest = match_example.group(4)
+                
+                # Módulo y acción en verde, seguido de reset a blanco para los valores
+                colored_line = f"{BLUE}{indent}{GREEN}{module} {action}{WHITE}"
+                
+                # Procesar el resto (flags y valores)
+                # Queremos --flag en verde y su valor en blanco
+                parts = re.split(r'(--[\w-]+)', rest)
+                for part in parts:
+                    if not part:
+                        continue
+                    if part.startswith('--'):
+                        colored_line += f"{GREEN}{part}{WHITE}"
+                    else:
+                        # Espacios y valores se quedan en blanco (ya seteado por el anterior o por el inicio)
+                        colored_line += part
+                
+                colored_lines.append(colored_line)
+                continue
+
+            # 2. Detectar headers (### acción)
+            if line.strip().startswith('###'):
+                # Header estilo "### module action"
+                match_header = re.match(r'^(\s*###\s+)([\w-]+)\s+([\w-]+)(.*)', line)
+                if match_header:
+                    colored_lines.append(f"{BLUE}{match_header.group(1)}{GREEN}{match_header.group(2)} {match_header.group(3)}{BLUE}{match_header.group(4)}")
+                else:
+                    # Header genérico "### titulo"
+                    colored_lines.append(re.sub(r'^(###\s*)([\w-]+)', r'\1' + GREEN + r'\2' + BLUE, line))
+                continue
+
+            # 3. Detectar listado de parámetros (- --param:)
+            if '--' in line and (line.strip().startswith('-') or line.strip().startswith('•')):
+                # Resaltar solo el flag en verde
+                colored_line = re.sub(r'(--[\w-]+)', GREEN + r'\1' + BLUE, line)
+                colored_lines.append(BLUE + colored_line)
+                continue
+
+            # 4. Texto normal en azul
+            colored_lines.append(BLUE + line)
+                
+        return '\n'.join(colored_lines) + RESET
+
     def get_help(self, args: List[str]) -> str:
         """Genera el texto de ayuda para la CLI"""
         if not args:
@@ -109,8 +170,12 @@ class CommandParser:
                 "Para ver los comandos de un módulo:",
                 "  help <módulo>",
                 "",
-                "Ejemplo:",
+                "Para ver ayuda de una acción específica:",
+                "  help <módulo> <acción>",
+                "",
+                "Ejemplos:",
                 "  help wan",
+                "  help firewall add_rule",
                 "",
                 "COMANDOS ESPECIALES:",
                 "  • help       - Mostrar esta ayuda",
@@ -119,7 +184,8 @@ class CommandParser:
                 "=" * 60,
                 ""
             ])
-            return '\n'.join(help_text)
+            # La ayuda general también se colorea
+            return self._apply_colors('\n'.join(help_text))
         else:
             # Ayuda de un módulo o acción específica
             module = args[0].lower()
@@ -131,165 +197,61 @@ class CommandParser:
                 'help',
                 f'{module}.md'
             )
+            
             if os.path.exists(help_file):
                 try:
                     with open(help_file, 'r', encoding='utf-8') as f:
                         md = f.read()
+                    
                     # Si piden ayuda extendida: help <módulo> <acción>
                     if len(args) > 1:
                         action = args[1].lower()
-                        # Solo permitir ayuda extendida para acciones comunes
-                        if action in self.COMMON_ACTIONS:
-                            pat = re.compile(r'^(#+)\s+.*' + re.escape(action) + r'.*$', re.IGNORECASE | re.MULTILINE)
-                            matches = list(pat.finditer(md))
-                            if matches:
-                                start = matches[0].start()
-                                next_header = re.search(r'^#{2,}\s', md[start+1:], re.MULTILINE)
-                                end = start + 1 + next_header.start() if next_header else len(md)
-                                section = md[start:end].strip()
-                                # Resaltar parámetros --param en verde
-                                GREEN = "\033[92m"
-                                RESET = "\033[0m"
-                                section = re.sub(r'(\s|^)(--[\w-]+)', r'\1' + GREEN + r'\2' + RESET, section)
-                                return section
-                            # Si no hay sección, fallback a ayuda de módulo
-                    # Resaltar parámetros --param y nombres de parámetros de sección en verde en todo el md
-                    GREEN = "\033[92m"
-                    RESET = "\033[0m"
-                    # --param
-                    md_colored = re.sub(r'(\s|^)(--[\w-]+)', r'\1' + GREEN + r'\2' + RESET, md)
-                    # Nombres de parámetros de sección (### param o   - param:)
-                    md_colored = re.sub(r'^(###\s*)([\w-]+)', r'\1' + GREEN + r'\2' + RESET, md_colored, flags=re.MULTILINE)
-                    md_colored = re.sub(r'(\n\s*-\s*)([\w-]+)(:)', r'\1' + GREEN + r'\2' + RESET + r'\3', md_colored)
-                    return md_colored
+                        
+                        # Buscar sección para CUALQUIER acción (no solo comunes)
+                        pat = re.compile(r'^(#+)\s+.*' + re.escape(action) + r'.*$', re.IGNORECASE | re.MULTILINE)
+                        matches = list(pat.finditer(md))
+                        
+                        if matches:
+                            # Sección encontrada - extraer contenido
+                            start = matches[0].start()
+                            match_end = matches[0].end()
+                            next_header = re.search(r'^#{2,}\s', md[match_end:], re.MULTILINE)
+                            end = match_end + next_header.start() if next_header else len(md)
+                            section = md[start:end].strip()
+                            
+                            return self._apply_colors(section)
+                        else:
+                            # Sección NO encontrada - mensaje informativo
+                            YELLOW = "\033[93m"
+                            RESET = "\033[0m"
+                            
+                            # Verificar si la acción existe en el módulo
+                            action_exists = action in self.COMMON_ACTIONS
+                            if module in self.MODULE_ACTIONS:
+                                if action in self.MODULE_ACTIONS[module]:
+                                    action_exists = True
+                            
+                            if action_exists:
+                                warning = f"{YELLOW}⚠️  No se encontró documentación específica para '{action}' en el archivo de ayuda.{RESET}\n\n"
+                                warning += f"La acción '{action}' existe pero no tiene una sección dedicada.\n"
+                                warning += f"Mostrando ayuda completa del módulo '{module}':\n\n"
+                                warning += "=" * 60 + "\n\n"
+                            else:
+                                warning = f"{YELLOW}⚠️  La acción '{action}' no existe en el módulo '{module}'.{RESET}\n\n"
+                                warning += f"Mostrando ayuda completa del módulo para ver las acciones disponibles:\n\n"
+                                warning += "=" * 60 + "\n\n"
+                            
+                            return warning + self._apply_colors(md)
+                    
+                    # Ayuda completa del módulo (sin acción específica)
+                    return self._apply_colors(md)
+                    
                 except Exception:
                     pass
 
             # Ayuda básica si no hay archivo
             help_text = [
                 f"Uso: {module} <acción> [opciones]",
-                f"",
-                f"Módulo: {module}",
-                f"",
-                f"Acciones disponibles:",
-            ]
-            GREEN = "\033[92m"
-            RESET = "\033[0m"
-            for action in self.COMMON_ACTIONS:
-                help_text.append(f"  {GREEN}{action}{RESET}")
-            if module in self.MODULE_ACTIONS:
-                for action in self.MODULE_ACTIONS[module]:
-                    help_text.append(f"  {GREEN}{action}{RESET}")
-            help_text.append("")
-            help_text.append("Opciones: Usa --key value según la acción.")
-            help_text.append("")
-            help_text.append("Ejemplos:")
-            help_text.append(f"  {module} status")
-            help_text.append(f"  {module} start")
-            help_text.append(f"  {module} stop")
-            help_text.append("")
-            help_text.append(f"Para más detalles, usa 'help {module}' o consulta la documentación.")
-            return '\n'.join(help_text)
-        
-        # Soporte legacy: JSON directo
-        if full_str.strip().startswith('{'):
-            import json
-            try:
-                return json.loads(full_str)
-            except json.JSONDecodeError:
-                # Si no es JSON válido, procesar como flags
-                pass
-        
-        # Procesar como flags modernos: --key value
-        params = {}
-        i = 0
-        while i < len(param_parts):
-            part = param_parts[i]
-            
-            # Debe comenzar con --
-            if not part.startswith('--'):
-                raise ValueError(f"Parámetro inválido: {part}\nUse formato: --key value")
-            
-            # Extraer nombre del flag (sin --)
-            key = part[2:]
-            
-            # Verificar si tiene valor o es flag booleano
-            if i + 1 < len(param_parts) and not param_parts[i + 1].startswith('--'):
-                # Tiene valor
-                value = param_parts[i + 1]
-                
-                # Intentar convertir a número si es posible
-                try:
-                    if '.' in value:
-                        value = float(value)
-                    else:
-                        value = int(value)
-                except ValueError:
-                    # Mantener como string
-                    pass
-                
-                params[key] = value
-                i += 2
-            else:
-                # Flag booleano (sin valor)
-                params[key] = True
-                i += 1
-        
-        return params if params else None
-    
-    def get_help(self, args: List[str]) -> str:
-        """Generate help text"""
-        if not args:
-            # Ayuda general: solo módulos y cómo pedir ayuda de un módulo
-            help_text = [
-                "",
-                "=" * 60,
-                "JSBACH V4.0 - AYUDA GENERAL",
-                "=" * 60,
-                "",
-                "MÓDULOS DISPONIBLES:",
-            ]
-            for module in self.MODULES:
-                help_text.append(f"  • {module}")
-            help_text.extend([
-                "",
-                "Para ver los comandos de un módulo:",
-                "  help <módulo>",
-                "",
-                "Ejemplo:",
-                "  help wan",
-                "",
-                "COMANDOS ESPECIALES:",
-                "  • help       - Mostrar esta ayuda",
-                "  • exit/quit  - Cerrar sesión",
-                "",
-                "=" * 60,
-                ""
-            ])
-            return '\n'.join(help_text)
-        
-        else:
-            # Ayuda de un módulo específico
-            module = args[0].lower()
-            if module not in self.MODULES:
-                return f"❌ Módulo desconocido: {module}"
-
-            # Intentar cargar archivo de ayuda del módulo
-            help_file = os.path.join(
-                os.path.dirname(__file__),
-                'help',
-                f'{module}.md'
-            )
-            if os.path.exists(help_file):
-                try:
-                    with open(help_file, 'r', encoding='utf-8') as f:
-                        return f.read()
-                except Exception:
-                    pass
-
-            # Ayuda básica estilo bash
-            help_text = [
-                f"Usage: {module} <acción> [opciones]",
                 f"",
                 f"Módulo: {module}",
                 f"",
@@ -308,5 +270,5 @@ class CommandParser:
             help_text.append(f"  {module} start")
             help_text.append(f"  {module} stop")
             help_text.append("")
-            help_text.append("Para más detalles, usa 'help {module}' o consulta la documentación.")
-            return '\n'.join(help_text)
+            help_text.append(f"Para más detalles, usa 'help {module}' o consulta la documentación.")
+            return self._apply_colors('\n'.join(help_text))

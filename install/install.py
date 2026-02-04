@@ -3,8 +3,9 @@ def create_cli_systemd_service(target_path, venv_path):
     cli_path = os.path.join(target_path, "app", "cli", "cli_server.py")
     service_content = f"""[Unit]
 Description=JSBach V4.0 CLI Service
+BindsTo=jsbach.service
+PartOf=jsbach.service
 After=jsbach.service
-Requires=jsbach.service
 
 [Service]
 Type=simple

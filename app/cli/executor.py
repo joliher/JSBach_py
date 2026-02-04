@@ -1,39 +1,29 @@
 """
-Command executor for CLI
-Executes parsed commands and returns results
+Ejecutor de comandos para la CLI
+Ejecuta los comandos parseados y devuelve los resultados
 """
 
 import logging
 from typing import Dict
-
 from app.controllers.admin_router import execute_module_action
 
 
 class CommandExecutor:
-    """Executes CLI commands and formats results"""
+    """Ejecuta los comandos parseados de la CLI"""
     
     async def execute(self, parsed_command: Dict) -> str:
-        """
-        Execute a parsed command
-        
-        Args:
-            parsed_command: Dictionary with command details from parser
+        """Ejecuta un comando parseado y devuelve el resultado"""
+        try:
+            module = parsed_command.get('module')
+            action = parsed_command.get('action')
+            params = parsed_command.get('params')
             
-
-        """
-        Ejecutor de comandos para la CLI
-        Ejecuta los comandos parseados y devuelve los resultados
-        """
-            return "❌ Comando no soportado"
-        import logging
-        from typing import Dict
-        from app.controllers.admin_router import execute_module_action
-        params = parsed_command.get('params')
-        class CommandExecutor:
-            """Ejecuta los comandos parseados de la CLI"""
+            if not module or not action:
+                return "❌ Comando no soportado"
+                
             # Ejecutar usando la función existente de admin_router
-            async def execute(self, parsed_command: Dict) -> str:
-                """Ejecuta un comando parseado y devuelve el resultado"""
+            success, message = execute_module_action(
+                module_name=module,
                 action=action,
                 params=params
             )
