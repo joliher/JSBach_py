@@ -60,29 +60,27 @@ sudo python3 install/install.py
 - ✅ Crea un entorno virtual Python
 - ✅ Instala paquetes Python (FastAPI, uvicorn)
 - ✅ Configura permisos de archivos
-- ✅ Crea un **servicio systemd** (`jsbach.service`)
+- ✅ Crea servicios systemd (`jsbach.service` y `jsbach-cli.service`)
 - ✅ Configura **sudoers** para comandos de red necesarios
 - ✅ Crea archivo de autenticación en `config/cli_users.json`
 
-### Servicio systemd
+### Servicios systemd
 
-JSBach se ejecuta como un servicio systemd:
+JSBach utiliza dos servicios interconectados:
+- `jsbach.service`: Motor principal y servidor web (puerto 8100)
+- `jsbach-cli.service`: Servidor CLI (puerto 2200). Depende de `jsbach.service`.
 
 ```bash
-# Ver estado del servicio
+# Ver estado de los servicios
 sudo systemctl status jsbach
+sudo systemctl status jsbach-cli
 
-# Iniciar servicio
-sudo systemctl start jsbach
-
-# Detener servicio
-sudo systemctl stop jsbach
-
-# Reiniciar servicio
+# Iniciar/Detener/Reiniciar (afecta a ambos)
 sudo systemctl restart jsbach
 
 # Ver logs en tiempo real
 sudo journalctl -u jsbach -f
+sudo journalctl -u jsbach-cli -f
 ```
 
 El servicio se ejecuta bajo el usuario **jsbach** y se inicia automáticamente al arrancar el sistema.
@@ -141,19 +139,19 @@ Para información detallada sobre comandos y uso del sistema:
 
 ### Pruebas
 
-Ejecuta el suite de pruebas para validar la instalación:
+Ejecuta el suite de pruebas para validar la estabilidad del sistema:
 
 ```bash
-cd /opt/JSBach_V4.0
-python3 test_web_endpoints.py
+cd /opt/JSBach_V4.0/install
+sudo python3 test_comprehensive.py
 ```
 
-Este script prueba:
-- ✅ Autenticación y acceso web
-- ✅ Endpoints de API `/admin`
-- ✅ Archivos estáticos (CSS/JS modulares)
-- ✅ Protección de rutas sin autenticación
-- ✅ Configuraciones de todos los módulos
+Este script realiza pruebas exhaustivas de:
+- ✅ Gestión de WAN y conectividad
+- ✅ Creación y eliminación de VLANs
+- ✅ Reglas de Firewall (Whitelist, Aislamiento, Restricción)
+- ✅ Configuración de NAT y DMZ
+- ✅ Seguridad de capa 2 con Ebtables (PVLAN y MAC Whitelist)
 
 ---
 
@@ -162,7 +160,8 @@ Este script prueba:
 Para desinstalar completamente JSBach V4.0:
 
 ```bash
-sudo python3 install/uninstall.py
+cd /opt/JSBach_V4.0/install
+sudo python3 uninstall.py
 ```
 
 El desinstalador te preguntará qué elementos deseas eliminar:
@@ -185,19 +184,20 @@ El desinstalador te preguntará qué elementos deseas eliminar:
 ```
 JSBach_V4.0/
 ├── app/
-│   ├── cli/          # Interfaz CLI (servidor TCP)
-│   │   └── help/     # Documentación de módulos (Markdown)
-│   ├── controllers/  # Controladores FastAPI
-│   │   ├── main_controller.py   # Rutas principales y middleware
-│   │   └── admin_router.py      # API de administración
-│   ├── core/         # Módulos de red (wan, nat, firewall, etc.)
-│   └── utils/        # Utilidades compartidas (helpers, auth, logging)
-├── config/           # Configuraciones JSON por módulo
-├── install/          # Scripts de instalación/desinstalación
-├── logs/             # Logs del sistema por módulo
-├── web/              # Interfaz web
-│   └── [module]/     # Páginas HTML por módulo
-└── main.py           # Punto de entrada de la aplicación
+│   ├── cli/          # Interfaz CLI (Servidor, Parser, Sesiones)
+│   │   ├── help/     # Documentación de módulos (Markdown)
+│   │   └── cli_server.py  # Punto de entrada del servicio CLI
+│   ├── controllers/  # Controladores FastAPI (API y Rutas)
+│   ├── core/         # Lógica de red (WAN, NAT, Firewall, etc.)
+│   └── utils/        # Helpers, validaciones y logs
+├── config/           # Archivos JSON de configuración persistente
+├── install/          # Scripts de instalación, desinstalación y tests
+│   ├── test_basics.py         # Pruebas básicas de módulos
+│   └── test_comprehensive.py  # Suite de pruebas exhaustiva
+├── logs/             # Registro de actividad por componente
+├── web/              # Interfaz gráfica (HTML, CSS, JS)
+├── main.py           # Punto de entrada del servidor web
+└── cli_server.py     # Script de arranque rápido para CLI
 ```
 
 ### Tecnologías utilizadas
