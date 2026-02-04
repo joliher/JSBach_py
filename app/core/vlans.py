@@ -1,14 +1,14 @@
 # app/core/vlans.py
 
 import os
-import re
 import subprocess
-from typing import Dict, Any, Tuple, Optional
-from ..utils.global_functions import create_module_config_directory, create_module_log_directory
+from typing import Dict, Any, Tuple
+from ..utils.global_functions import create_module_config_directory, create_module_log_directory, get_module_status, check_module_dependencies
 from ..utils.validators import validate_vlan_id, validate_ip_network
 from ..utils.helpers import (
     load_json_config, save_json_config, update_module_status, run_command
 )
+from .helpers import initialize_default_vlans, bridge_exists
 
 # Config file in V4 structure
 CONFIG_FILE = os.path.abspath(
@@ -21,38 +21,12 @@ _save_config = lambda data: save_json_config(CONFIG_FILE, data)
 _update_status = lambda status: update_module_status(CONFIG_FILE, status)
 _run_cmd = lambda cmd, ignore_error=False: run_command(cmd)[0]
 
-
-def _initialize_default_vlans() -> None:
-    """Asegurar que VLANs 1 y 2 existan siempre por defecto."""
-    cfg = _load_config()
-    vlans = cfg.get("vlans", [])
-    
-    # Verificar si VLAN 1 existe
-    vlan1_exists = any(v.get("id") == 1 for v in vlans)
-    if not vlan1_exists:
-        vlans.append({
-            "id": 1,
-            "name": "Admin",
-            "ip_interface": "192.168.1.1/24",
-            "ip_network": "192.168.1.0/24"
-        })
-    
-    # Verificar si VLAN 2 existe
-    vlan2_exists = any(v.get("id") == 2 for v in vlans)
-    if not vlan2_exists:
-        vlans.append({
-            "id": 2,
-            "name": "DMZ",
-            "ip_interface": "192.168.2.1/24",
-            "ip_network": "192.168.2.0/24"
-        })
-    
-    cfg["vlans"] = vlans
-    _save_config(cfg)
+# Aliases para funciones de helpers (compatibilidad)
+_initialize_default_vlans = lambda: initialize_default_vlans(CONFIG_FILE)
+_bridge_exists = bridge_exists
 
 
-def _bridge_exists() -> bool:
-    return os.path.exists("/sys/class/net/br0")
+# --------------------------------
 
 
 # -----------------------------

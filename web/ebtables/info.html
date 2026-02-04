@@ -3,77 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <title>EBTABLES - Información</title>
-    <style>
-        html, body {
-            margin: 0;
-            font-family: Arial, sans-serif;
-            padding: 15px;
-            background-color: #f5f5f5;
-        }
-        h3 {
-            margin-top: 0;
-            color: #333;
-        }
-        h4 {
-            color: #007acc;
-            margin-top: 20px;
-            margin-bottom: 10px;
-        }
-        p, li {
-            line-height: 1.6;
-            color: #444;
-        }
-        .info-section {
-            background: white;
-            border-radius: 6px;
-            padding: 15px;
-            margin-bottom: 15px;
-            border-left: 4px solid #007acc;
-        }
-        .highlight {
-            background: #fff3cd;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-weight: 600;
-        }
-        .warning-box {
-            background: #fff3cd;
-            border: 2px solid #ffc107;
-            border-radius: 6px;
-            padding: 12px;
-            margin: 15px 0;
-            color: #856404;
-        }
-        .info-box {
-            background: #d1ecf1;
-            border: 2px solid #0c5460;
-            border-radius: 6px;
-            padding: 12px;
-            margin: 15px 0;
-            color: #0c5460;
-        }
-        ul {
-            margin-left: 20px;
-        }
-        code {
-            background: #2d2d2d;
-            color: #f8f8f2;
-            padding: 2px 6px;
-            border-radius: 3px;
-            font-family: 'Courier New', monospace;
-            font-size: 13px;
-        }
-        .code-block {
-            background: #2d2d2d;
-            color: #f8f8f2;
-            padding: 12px;
-            border-radius: 6px;
-            font-family: 'Courier New', monospace;
-            font-size: 13px;
-            overflow-x: auto;
-            margin: 10px 0;
-        }
-    </style>
+    
+    <link rel="stylesheet" href="/web/00-css/ebtables/info.css">
 </head>
 <body>
 
@@ -82,7 +13,7 @@
 <div class="info-section">
     <h4>🌉 ¿Qué es EBTABLES?</h4>
     <p>
-        El módulo <span class="highlight">EBTABLES</span> proporciona aislamiento de VLANs a nivel de 
+        El módulo <span class="highlight">EBTABLES</span> proporciona PVLAN (Private VLAN) a nivel de 
         <strong>capa 2 (enlace de datos)</strong> utilizando <code>ebtables</code> 
         (Ethernet Bridge Tables). Esto permite controlar el tráfico entre VLANs de manera más granular 
         que con iptables, actuando directamente sobre las tramas Ethernet.
@@ -169,7 +100,7 @@ ebtables -A FORWARD_VLAN_3 -o eth0 -j ACCEPT               (permite WAN salida)
     </ul>
     
     <div class="warning-box">
-        <strong>⚠️ Advertencia:</strong> El aislamiento de VLANs puede interrumpir la comunicación 
+        <strong>⚠️ Advertencia:</strong> PVLAN (Private VLAN) puede interrumpir la comunicación 
         entre dispositivos. Asegúrate de comprender las implicaciones antes de aislar VLANs en producción.
     </div>
 </div>

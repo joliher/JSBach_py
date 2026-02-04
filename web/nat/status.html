@@ -3,79 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <title>NAT - Estado</title>
-    <style>
-        html, body {
-            margin: 0;
-            padding: 15px;
-            font-family: Arial, sans-serif;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-        }
-        h2 {
-            color: #333;
-            margin-top: 0;
-            border-bottom: 2px solid #3399ff;
-            padding-bottom: 10px;
-        }
-        .status-content {
-            background: white;
-            padding: 20px;
-            border-radius: 6px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            margin-bottom: 20px;
-            white-space: pre-wrap;
-            font-family: 'Courier New', monospace;
-            font-size: 13px;
-            line-height: 1.6;
-            color: #333;
-            border-left: 4px solid #3399ff;
-        }
-        .loading {
-            text-align: center;
-            color: #999;
-            padding: 40px 20px;
-        }
-        .error {
-            background: #f8d7da;
-            border: 1px solid #f5c6cb;
-            border-radius: 4px;
-            color: #721c24;
-            padding: 15px;
-            margin-bottom: 15px;
-        }
-        .success {
-            background: #d4edda;
-            border: 1px solid #c3e6cb;
-            border-radius: 4px;
-            color: #155724;
-            padding: 15px;
-            margin-bottom: 15px;
-        }
-        button {
-            padding: 10px 20px;
-            background-color: #3399ff;
-            color: white;
-            border: none;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            margin-right: 10px;
-            transition: background-color 0.2s;
-        }
-        button:hover {
-            background-color: #0078d4;
-        }
-        button:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
-        .button-group {
-            margin-bottom: 20px;
-        }
-    </style>
+    
+    <link rel="stylesheet" href="/web/00-css/nat/status.css">
+    <script src="/web/00-js/nat/status.js"></script>
 </head>
 <body>
 <div class="container">
@@ -91,62 +21,6 @@
     </div>
 </div>
 
-<script>
-async function refreshStatus() {
-    const container = document.getElementById('statusContainer');
-    const btn = document.getElementById('btnRefresh');
-    
-    btn.disabled = true;
-    container.innerHTML = '<div class="loading">Cargando estado de NAT...</div>';
-    
-    try {
-        const response = await fetch('/admin/nat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'status' }),
-            credentials: 'include'
-        });
-        
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            container.innerHTML = `
-                <div class="success">✅ Estado obtenido correctamente</div>
-                <div class="status-content">${escapeHtml(data.message)}</div>
-            `;
-        } else {
-            container.innerHTML = `
-                <div class="error">❌ Error: ${escapeHtml(data.message || 'Error desconocido')}</div>
-            `;
-        }
-    } catch (error) {
-        console.error('Error:', error);
-        container.innerHTML = `
-            <div class="error">❌ Error al obtener el estado: ${escapeHtml(error.message)}</div>
-        `;
-    } finally {
-        btn.disabled = false;
-    }
-}
 
-function goBack() {
-    if (parent && parent.frames['body']) {
-        parent.frames['body'].location.href = '/web/nat/info.html';
-    }
-}
-
-function escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-}
-
-// Cargar estado al abrir la página
-window.addEventListener('DOMContentLoaded', refreshStatus);
-</script>
 </body>
 </html>

@@ -275,7 +275,8 @@ if __name__ == "__main__":
     print(f"{GREEN}{'=' * 60}{RESET}")
     
     info("Notas:")
-    print("  • Las dependencias del sistema (python3, pip, venv) NO se han eliminado")
+    print("  • Las dependencias del sistema NO se han eliminado:")
+    print("    python3, pip, venv, iptables, iproute2, ebtables")
     print("    ya que pueden ser usadas por otros programas")
     print("  • Si conservaste interfaces de red o reglas de iptables,")
     print("    puedes eliminarlas manualmente cuando lo desees")

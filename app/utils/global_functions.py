@@ -2,6 +2,15 @@ import json
 import logging
 import os
 
+def check_module_dependencies(module_name: str = None) -> tuple:
+    """
+    Verifica dependencias de un módulo. Por defecto, VLANs depende de WAN.
+    """
+    if module_name is None or module_name == "vlans":
+        if get_module_status("wan") != 1:
+            return False, "Dependencia WAN no está activa"
+    return True, "Dependencias satisfechas"
+
 GLOBAL_CONFIG = {}
 
 def load_config(path):
@@ -95,42 +104,9 @@ def get_module_status(module_name: str) -> int:
     
     if not os.path.exists(config_file):
         return 0
-    
     try:
         with open(config_file, 'r') as f:
             config = json.load(f)
         return config.get("status", 0)
     except Exception:
         return 0
-
-
-def check_module_dependencies(module_name: str) -> tuple[bool, str]:
-    """Check if all dependencies of a module are active.
-    
-    Returns: (success: bool, message: str)
-    """
-    # Define module dependencies
-    dependencies = {
-        "wan": [],
-        "vlans": [],
-        "nat": ["wan"],
-        "tagging": ["vlans"],
-        "firewall": ["vlans"],
-        "dmz": ["nat"],
-        "ebtables": ["wan", "vlans", "tagging"]
-    }
-    
-    required_deps = dependencies.get(module_name, [])
-    
-    if not required_deps:
-        return True, "No tiene dependencias"
-    
-    inactive_deps = []
-    for dep in required_deps:
-        if get_module_status(dep) != 1:
-            inactive_deps.append(dep)
-    
-    if inactive_deps:
-        return False, f"Dependencias inactivas: {', '.join(inactive_deps)}"
-    
-    return True, "Todas las dependencias están activas"

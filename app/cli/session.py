@@ -10,39 +10,64 @@ from typing import Tuple
 
 from app.utils.auth_helper import authenticate_user
 from .parser import CommandParser
-from .executor import CommandExecutor
 
-
-class CLISession:
+"""
+Manejador de sesión CLI
+Gestiona conexiones de clientes y ejecución de comandos
+"""
     """Handles a single CLI session for a connected client"""
-    
-    def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, addr):
-        self.reader = reader
-        self.writer = writer
+import asyncio
+import logging
+import os
         self.addr = addr
-        self.authenticated = False
-        self.username = None
-        self.role = None
+from app.utils.auth_helper import authenticate_user
+from .parser import CommandParser
+from .executor import CommandExecutor
         self.parser = CommandParser()
         self.executor = CommandExecutor()
-        
-    async def send(self, message: str):
+class CLISession:
+    """Gestiona una única sesión CLI para un cliente conectado"""
         """Send a message to the client"""
-        if not message.endswith('\n'):
+    def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter, addr):
             message += '\n'
         self.writer.write(message.encode('utf-8'))
         await self.writer.drain()
     
-    async def receive(self) -> str:
-        """Receive a line from the client"""
-        try:
-            data = await asyncio.wait_for(self.reader.readline(), timeout=300.0)
-            return data.decode('utf-8').strip()
-        except asyncio.TimeoutError:
-            return ""
-        except Exception as e:
-            logging.error(f"CLI: Error receiving data: {e}")
-            return ""
+
+    async def receive(self, mask_input: bool = False) -> str:
+        """Receive a line from the client. If mask_input is True, echo * instead of real chars (for password)."""
+        if not mask_input:
+            try:
+    async def send(self, message: str):
+        """Enviar un mensaje al cliente"""
+            except asyncio.TimeoutError:
+                return ""
+            except Exception as e:
+                logging.error(f"CLI: Error receiving data: {e}")
+                return ""
+        else:
+    async def receive(self, mask_input: bool = False) -> str:
+        """Recibe una línea del cliente. Si mask_input es True, muestra * en vez de los caracteres reales (para contraseña)."""
+            try:
+                while True:
+                    char = await asyncio.wait_for(self.reader.read(1), timeout=300.0)
+                    if not char:
+                        break
+                    c = char.decode('utf-8', errors='ignore')
+                    if c in ('\n', '\r'):
+                        break
+                    if c == '\x7f':  # Backspace
+                        if password:
+            # Modo oculto: leer carácter a carácter y mostrar *
+                            await self.send('\b \b')
+                        continue
+                    password += c
+                    await self.send('*',)
+                await self.send('')  # Nueva línea
+                return password.strip()
+            except Exception as e:
+                logging.error(f"CLI: Error receiving masked input: {e}")
+                return ""
     
     async def authenticate(self) -> bool:
         """Authenticate the user"""
@@ -52,19 +77,18 @@ class CLISession:
         await self.send("")
         
         # Solicitar credenciales
+
         await self.send("Username: ")
         username = await self.receive()
-        
         if not username:
-            return False
-        
+    async def authenticate(self) -> bool:
+        """Autentica al usuario"""
         await self.send("Password: ")
-        password = await self.receive()
-        
+        password = await self.receive(mask_input=True)
         if not password:
             return False
         
-        # Autenticar contra cli_users.json
+        # Solicitar credenciales
         auth_file = os.path.join(os.getcwd(), "config", "cli_users.json")
         success, user_data = authenticate_user(username, password, auth_file)
         
@@ -75,7 +99,7 @@ class CLISession:
             await self.send("")
             await self.send(f"✅ Autenticación exitosa. Bienvenido {username}!")
             await self.send("")
-            return True
+        # Autenticar contra cli_users.json
         else:
             await self.send("")
             await self.send("❌ Credenciales incorrectas")
@@ -93,44 +117,46 @@ class CLISession:
         try:
             # Autenticación
             if not await self.authenticate():
-                await self.send("Conexión cerrada.")
-                self.writer.close()
+    async def show_prompt(self):
+        """Muestra el prompt de comandos"""
                 await self.writer.wait_closed()
                 return
             
             # Mostrar ayuda inicial
-            await self.send("Escribe 'help' para ver los comandos disponibles.")
-            await self.send("Escribe 'exit' o 'quit' para salir.")
+    async def handle(self):
+        """Manejador principal de la sesión CLI"""
             await self.send("")
-            
+            # Autenticación
             # Loop de comandos
             while True:
                 await self.show_prompt()
                 command = await self.receive()
                 
                 if not command:
-                    continue
+            # Mostrar ayuda inicial
                 
                 # Comandos especiales
                 if command.lower() in ['exit', 'quit', 'logout']:
                     await self.send("")
-                    await self.send("👋 Cerrando sesión...")
+            # Bucle principal de comandos
                     break
                 
                 # Parsear y ejecutar comando
                 try:
                     parsed = self.parser.parse(command)
-                    
-                    if parsed['command'] == 'help':
+                    if isinstance(parsed, str):
+                        await self.send(parsed)
+                # Comandos especiales
                         help_text = self.parser.get_help(parsed.get('args', []))
-                        await self.send(help_text)
-                    else:
+                        BLUE = "\033[94m"
+                        RESET = "\033[0m"
+                        colored_help = f"{BLUE}{help_text}{RESET}"
+                        await self.send(colored_help)
+                # Parsear y ejecutar comando
                         result = await self.executor.execute(parsed)
                         await self.send(result)
-                    
                 except Exception as e:
                     await self.send(f"❌ Error: {str(e)}")
-                
                 await self.send("")
         
         except Exception as e:

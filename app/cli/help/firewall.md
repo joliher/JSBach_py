@@ -40,44 +40,51 @@ Reiniciar el firewall
 Ejemplo:
   firewall restart
 
+
 ### firewall enable_whitelist
 Habilitar whitelist en una VLAN
 
-Ejemplo:
-  firewall enable_whitelist {"vlan_id": 10, "whitelist": ["8.8.8.8", "1.1.1.1", "208.67.222.222"]}
+Ejemplo (recomendado):
+  firewall enable_whitelist --vlan_id 10 --whitelist 8.8.8.8,1.1.1.1,208.67.222.222
+
+Para arrays complejos (legacy compatible):
+  firewall enable_whitelist --params '{"vlan_id": 10, "whitelist": ["8.8.8.8", "1.1.1.1", "208.67.222.222"]}'
 
 Parámetros:
-  - vlan_id: ID de la VLAN (número)
-  - whitelist: Array de IPs permitidas
+  - --vlan_id: ID de la VLAN (número)
+  - --whitelist: Lista separada por comas de IPs permitidas
+
 
 ### firewall disable_whitelist
 Deshabilitar whitelist en una VLAN
 
 Ejemplo:
-  firewall disable_whitelist {"vlan_id": 10}
+  firewall disable_whitelist --vlan_id 10
 
 Parámetros:
-  - vlan_id: ID de la VLAN
+  - --vlan_id: ID de la VLAN
+
 
 ### firewall add_rule
 Añadir una IP a la whitelist de una VLAN
 
 Ejemplo:
-  firewall add_rule {"vlan_id": 10, "rule": "4.4.4.4"}
+  firewall add_rule --vlan_id 10 --rule 4.4.4.4
 
 Parámetros:
-  - vlan_id: ID de la VLAN
-  - rule: IP a añadir
+  - --vlan_id: ID de la VLAN
+  - --rule: IP a añadir
+
 
 ### firewall remove_rule
 Eliminar una IP de la whitelist de una VLAN
 
 Ejemplo:
-  firewall remove_rule {"vlan_id": 10, "rule": "4.4.4.4"}
+  firewall remove_rule --vlan_id 10 --rule 4.4.4.4
 
 Parámetros:
-  - vlan_id: ID de la VLAN
-  - rule: IP a eliminar
+  - --vlan_id: ID de la VLAN
+  - --rule: IP a eliminar
 
 ### firewall aislar
 Aislar una VLAN (sin acceso a Internet)

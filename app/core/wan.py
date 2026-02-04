@@ -1,15 +1,14 @@
 # app/core/wan.py
 
-import asyncio
-import time
 import os
-from typing import Dict, Any, Tuple, Optional
+from typing import Dict, Any, Tuple
 from ..utils.global_functions import create_module_config_directory, create_module_log_directory
 from ..utils.validators import validate_ip_address, validate_interface_name
 from ..utils.helpers import (
     load_json_config, save_json_config, update_module_status,
     run_command, validate_interface_name as validate_iface
 )
+from .helpers import verify_wan_status, verify_dhcp_assignment
 
 # Config file in V4 structure
 CONFIG_FILE = os.path.abspath(
@@ -21,95 +20,14 @@ _load_config = lambda: load_json_config(CONFIG_FILE)
 _run_command = lambda cmd: run_command(cmd)
 _update_status = lambda status: update_module_status(CONFIG_FILE, status)
 
-
-def _verify_wan_status() -> Tuple[bool, Optional[str]]:
-    """
-    Verifica que WAN está completamente funcional:
-    - Interfaz existe y está UP
-    - Tiene IP asignada
-    - Tiene ruta por defecto
-    
-    Retorna: (is_valid: bool, interface: Optional[str])
-    """
-    cfg = _load_config()
-    if not cfg:
-        return False, None
-    
-    iface = cfg.get("interface")
-    if not iface:
-        return False, None
-    
-    # Verificar que la interfaz existe y está UP
-    success, ip_info = _run_command(["/usr/sbin/ip", "a", "show", iface])
-    if not success:
-        return False, None  # Interfaz no existe
-    
-    is_up = "state UP" in ip_info or ",UP," in ip_info
-    if not is_up:
-        return False, None  # Interfaz no está UP
-    
-    # Verificar que tiene IP asignada
-    has_ip = "inet " in ip_info
-    if not has_ip:
-        return False, None  # Sin IP asignada
-    
-    # Verificar que tiene ruta por defecto
-    success, routes = _run_command(["/usr/sbin/ip", "r"])
-    if not success or "default" not in routes:
-        return False, None  # Sin ruta por defecto
-    
-    return True, iface
+# Aliases para funciones de helpers (compatibilidad con el resto del código)
+_verify_wan_status = lambda: verify_wan_status(CONFIG_FILE)
+_verify_dhcp_assignment = lambda iface, max_wait=30: verify_dhcp_assignment(iface, CONFIG_FILE, max_wait)
 
 
-async def _verify_dhcp_assignment(iface: str, max_wait: int = 30) -> None:
-    """
-    Verifica en background que se asignó una IP por DHCP.
-    Si después de max_wait segundos no se asignó, detiene el proceso.
-    Se ejecuta como tarea asyncio sin bloquear el flujo principal.
-    
-    También verifica que la interfaz está UP y tiene ruta por defecto.
-    """
-    start_time = time.time()
-    check_interval = 2  # Verificar cada 2 segundos
-    
-    while (time.time() - start_time) < max_wait:
-        await asyncio.sleep(check_interval)
-        
-        # Verificar si la interfaz tiene una IP asignada
-        success, ip_info = _run_command(["/usr/sbin/ip", "a", "show", iface])
-        
-        if not success:
-            continue
-        
-        # Verificar que tiene IP, está UP y tiene ruta por defecto
-        has_ip = "inet " in ip_info
-        is_up = "state UP" in ip_info or ",UP," in ip_info
-        
-        if not (has_ip and is_up):
-            continue
-        
-        # Verificar ruta por defecto
-        success_routes, routes = _run_command(["/usr/sbin/ip", "r"])
-        if success_routes and "default" in routes:
-            # Todo está bien, WAN está completamente funcional
-            cfg = _load_config() or {}
-            cfg["status"] = 1
-            cfg.pop("dhcp_error", None)
-            save_json_config(CONFIG_FILE, cfg)
-            return  # IP asignada correctamente con todas las validaciones, terminar
-    
-    # Si llegamos aquí, DHCP no cumplió todas las validaciones en el tiempo límite
-    # Registrar error y detener DHCP
-    _run_command(["/usr/sbin/dhcpcd", "-k", iface])
-    cfg = _load_config() or {}
-    cfg["status"] = 0
-    cfg["dhcp_error"] = "DHCP timeout: No se cumplieron todas las validaciones en 30 segundos (IP, interfaz UP, ruta)"
-    save_json_config(CONFIG_FILE, cfg)
-
-
-# -----------------------------
+# --------------------------------
 # Acciones públicas (Admin API)
-# -----------------------------
+# --------------------------------
 
 def start(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     create_module_config_directory("wan")
@@ -285,6 +203,12 @@ def config(params: Dict[str, Any]) -> Tuple[bool, str]:
     for r in required:
         if not params.get(r):
             return False, f"Falta el parámetro '{r}'"
+
+    # Validar que mode es un valor permitido
+    mode = params["mode"]
+    allowed_modes = ["manual", "dhcp"]
+    if mode not in allowed_modes:
+        return False, f"Modo inválido: '{mode}'. Valores permitidos: {', '.join(allowed_modes)}"
 
     if params["mode"] == "manual":
         for r in ["ip", "mask", "gateway", "dns"]:

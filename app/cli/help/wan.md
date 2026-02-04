@@ -10,14 +10,18 @@ Ver el estado actual de la interfaz WAN
 Ejemplo:
   wan status
 
+
 ### wan config
 Configurar la interfaz WAN
 
-Con DHCP:
-  wan config {"mode": "dhcp", "interface": "eth0"}
+Con DHCP (recomendado):
+  wan config --mode dhcp --interface eth0
 
-Con IP estática:
-  wan config {"mode": "static", "interface": "eth0", "ip": "192.168.1.100", "netmask": "255.255.255.0", "gateway": "192.168.1.1", "dns": ["8.8.8.8", "8.8.4.4"]}
+Con IP estática (recomendado):
+  wan config --mode static --interface eth0 --ip 192.168.1.100 --netmask 255.255.255.0 --gateway 192.168.1.1
+
+Para múltiples DNS (legacy compatible):
+  wan config --params '{"mode": "static", "interface": "eth0", "ip": "192.168.1.100", "netmask": "255.255.255.0", "gateway": "192.168.1.1", "dns": ["8.8.8.8", "8.8.4.4"]}'
 
 ### wan start
 Iniciar la interfaz WAN

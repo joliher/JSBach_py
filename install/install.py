@@ -1,3 +1,40 @@
+def create_cli_systemd_service(target_path, venv_path):
+    info("Creando servicio systemd para CLI")
+    cli_path = os.path.join(target_path, "app", "cli", "cli_server.py")
+    service_content = f"""[Unit]
+Description=JSBach V4.0 CLI Service
+After=jsbach.service
+Requires=jsbach.service
+
+[Service]
+Type=simple
+User=jsbach
+Group=jsbach
+WorkingDirectory={target_path}
+Environment=\"PATH={venv_path}/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin\"
+ExecStart={venv_path}/bin/python3 {cli_path}
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+"""
+    service_path = "/etc/systemd/system/jsbach-cli.service"
+    with open(service_path, "w") as f:
+        f.write(service_content)
+
+    cmds = [
+        "systemctl daemon-reload",
+        "systemctl enable jsbach-cli",
+        "systemctl restart jsbach-cli"
+    ]
+    for c in cmds:
+        result = subprocess.run(c, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+        if result.returncode != 0:
+            error(f"Fallo al ejecutar: {c}\n{result.stderr.strip()}")
+    success("Servicio systemd CLI creado y en ejecución")
 #!/usr/bin/env python3
 
 import os
@@ -100,9 +137,15 @@ def ensure_root():
 ###############
 def install_dependencies():
     info("Instalando dependencias del sistema...")
+    
+    # Paquetes necesarios:
+    # - python3, python3-pip, python3-venv: entorno Python
+    # - iptables: reglas de firewall, NAT, DMZ
+    # - iproute2: comandos ip y bridge para VLANs y routing
+    # - ebtables: filtrado L2 para aislamiento de VLANs
     commands = [
         "apt update -qq",
-        "apt install -y python3 python3-pip python3-venv -qq"
+        "apt install -y python3 python3-pip python3-venv iptables iproute2 ebtables -qq"
     ]
     for c in commands:
         cmd(c)
@@ -419,6 +462,7 @@ if __name__ == "__main__":
     print()
 
     create_systemd_service(target_path, venv_path, port)
+    create_cli_systemd_service(target_path, venv_path)
 
     # Definir los comandos permitidos en sudoers
     allowed_commands = [

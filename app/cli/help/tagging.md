@@ -10,31 +10,33 @@ Ver el estado actual del tagging
 Ejemplo:
   tagging status
 
+
 ### tagging config
 Configurar tagging en interfaces (añadir, eliminar, mostrar)
 
 Añadir interfaz con VLAN UNTAG:
-  tagging config {"action": "add", "name": "eth1", "vlan_untag": "10", "vlan_tag": ""}
+  tagging config --action add --name eth1 --vlan_untag 10
 
 Añadir interfaz con VLANs TAG:
-  tagging config {"action": "add", "name": "eth2", "vlan_untag": "", "vlan_tag": "10,20,30"}
+  tagging config --action add --name eth2 --vlan_tag 10,20,30
 
 Eliminar interfaz:
-  tagging config {"action": "remove", "name": "eth1"}
+  tagging config --action remove --name eth1
 
 Mostrar configuración:
-  tagging config {"action": "show"}
+  tagging config --action show
 
 NOTA: Una interfaz NO puede estar UNTAGGED en una VLAN Y TAGGED en otras simultáneamente.
       Debe elegir UNO de estos modos:
       - UNTAG: Acceso a una sola VLAN (vlan_untag: "10")
       - TAG:   Troncal con múltiples VLANs (vlan_tag: "10,20,30")
 
+
 Parámetros:
-  - action: "add", "remove" o "show"
-  - name: Nombre de la interfaz física
-  - vlan_untag: VLAN sin etiquetar (una sola VLAN)
-  - vlan_tag: VLANs etiquetadas (lista separada por comas)
+  - --action: "add", "remove" o "show"
+  - --name: Nombre de la interfaz física
+  - --vlan_untag: VLAN sin etiquetar (una sola VLAN)
+  - --vlan_tag: VLANs etiquetadas (lista separada por comas)
 
 ### tagging start
 Iniciar tagging (aplicar configuración)
@@ -70,13 +72,14 @@ Ejemplo:
 
 ## EJEMPLOS DE CONFIGURACIÓN
 
+
 ### Puerto de acceso (PC normal):
-  tagging config {"action": "add", "name": "eth1", "vlan_untag": "10", "vlan_tag": ""}
+  tagging config --action add --name eth1 --vlan_untag 10
   - El PC en eth1 estará en VLAN 10
   - No necesita configuración especial de VLAN
 
 ### Puerto troncal (switch):
-  tagging config {"action": "add", "name": "eth2", "vlan_untag": "", "vlan_tag": "10,20,30"}
+  tagging config --action add --name eth2 --vlan_tag 10,20,30
   - El switch recibirá tráfico de VLANs 10, 20 y 30 etiquetado
   - El switch debe soportar VLANs
 

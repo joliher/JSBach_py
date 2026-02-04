@@ -1,0 +1,53 @@
+html, body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    padding: 10px;
+    background-color: #f5f5f5;
+}
+h3 {
+    margin-top: 0;
+    color: #333;
+}
+.controls {
+    margin-bottom: 15px;
+}
+button {
+    padding: 8px 15px;
+    cursor: pointer;
+    border: 1px solid #ccc;
+    background-color: #fff;
+    font-size: 14px;
+    transition: all 0.2s;
+    border-radius: 4px;
+}
+button:hover {
+    background-color: #e8f4ff;
+}
+.status-box {
+    background: #f8f9fa;
+    border-left: 4px solid #007acc;
+    border-radius: 4px;
+    padding: 15px;
+    margin-bottom: 15px;
+}
+.status-header {
+    font-weight: 700;
+    font-size: 16px;
+    color: #333;
+    margin-bottom: 10px;
+}
+.status-content {
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    color: #444;
+}
+.loading {
+    text-align: center;
+    padding: 20px;
+    color: #666;
+}
+    .success { color: #28a745; font-weight: bold; }
+    .error { color: #dc3545; font-weight: bold; }

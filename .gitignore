@@ -77,3 +77,4 @@ config/
 *.tmp
 *.bak
 *.backup
+cookies.txt

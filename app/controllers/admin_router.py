@@ -30,17 +30,16 @@ class ModuleRequest(BaseModel):
 # Estado servicios
 # -----------------------------
 def get_status_from_config(module_name: str) -> str:
-    # Mapeo de módulos a sus rutas de configuración
+ # Directorio de configuración para JSBach_V4.0
     config_paths = {
         "wan": os.path.join(CONFIG_DIR, "wan", "wan.json"),
         "nat": os.path.join(CONFIG_DIR, "nat", "nat.json"),
         "firewall": os.path.join(CONFIG_DIR, "firewall", "firewall.json"),
         "vlans": os.path.join(CONFIG_DIR, "vlans", "vlans.json"),
-        "tagging": os.path.join(CONFIG_DIR, "tagging", "tagging.json"),
         "dmz": os.path.join(CONFIG_DIR, "dmz", "dmz.json"),
         "ebtables": os.path.join(CONFIG_DIR, "ebtables", "ebtables.json")
     }
-    
+
     config_file = config_paths.get(module_name)
     if not config_file or not os.path.exists(config_file):
         return "DESCONOCIDO"

@@ -196,8 +196,6 @@ JSBach_V4.0/
 ├── install/          # Scripts de instalación/desinstalación
 ├── logs/             # Logs del sistema por módulo
 ├── web/              # Interfaz web
-│   ├── 00-css/       # Estilos CSS modulares
-│   ├── 00-js/        # JavaScript modular
 │   └── [module]/     # Páginas HTML por módulo
 └── main.py           # Punto de entrada de la aplicación
 ```
@@ -214,7 +212,7 @@ JSBach_V4.0/
 
 - **Helpers centralizados**: Módulos compartidos en `app/utils/` para config, validación y logging
 - **API RESTful**: Endpoints en `/admin/` para gestión de módulos
-- **Frontend modular**: CSS y JS separados en carpetas `00-css/` y `00-js/`
+- **Frontend modular**: CSS y JavaScript embebido en cada página HTML
 - **Autenticación**: Sistema de sesiones con middleware de protección
 - **Logs estructurados**: Registro de acciones por módulo en `logs/`
 

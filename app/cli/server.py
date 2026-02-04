@@ -1,6 +1,7 @@
+
 """
-TCP Server for JSBach CLI
-Handles incoming connections and manages CLI sessions
+Servidor TCP para la CLI de JSBach
+Gestiona conexiones entrantes y sesiones CLI
 """
 
 import asyncio
@@ -11,7 +12,7 @@ from .session import CLISession
 
 
 class CLIServer:
-    """TCP server for CLI connections on port 2200"""
+    """Servidor TCP para conexiones CLI en el puerto 2200"""
     
     def __init__(self, host: str = "0.0.0.0", port: int = 2200):
         self.host = host
@@ -20,7 +21,7 @@ class CLIServer:
         self.active_sessions = []
         
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
-        """Handle a new client connection"""
+        """Gestiona una nueva conexión de cliente"""
         addr = writer.get_extra_info('peername')
         logging.info(f"CLI: Nueva conexión desde {addr}")
         
@@ -36,7 +37,7 @@ class CLIServer:
             logging.info(f"CLI: Conexión cerrada desde {addr}")
     
     async def start(self):
-        """Start the CLI server"""
+        """Inicia el servidor CLI"""
         self.server = await asyncio.start_server(
             self.handle_client,
             self.host,
@@ -50,7 +51,7 @@ class CLIServer:
             await self.server.serve_forever()
     
     async def stop(self):
-        """Stop the CLI server"""
+        """Detiene el servidor CLI"""
         if self.server:
             self.server.close()
             await self.server.wait_closed()

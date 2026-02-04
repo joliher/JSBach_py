@@ -10,24 +10,28 @@ Ver el estado actual de las VLANs
 Ejemplo:
   vlans status
 
+
 ### vlans config
 Configurar VLANs (añadir, eliminar, mostrar)
 
-Añadir VLAN:
-  vlans config {"action": "add", "id": 10, "name": "Oficina", "ip_interface": "192.168.10.1/24", "ip_network": "192.168.10.0/24"}
+Añadir VLAN (recomendado):
+  vlans config --action add --id 10 --name Oficina --ip_interface 192.168.10.1/24 --ip_network 192.168.10.0/24
 
 Eliminar VLAN:
-  vlans config {"action": "remove", "id": 10}
+  vlans config --action remove --id 10
 
 Mostrar configuración:
-  vlans config {"action": "show"}
+  vlans config --action show
+
+Para arrays complejos (legacy compatible):
+  vlans config --params '{"action": "add", "id": 10, "name": "Oficina", "ip_interface": "192.168.10.1/24", "ip_network": "192.168.10.0/24"}'
 
 Parámetros para añadir:
-  - action: "add"
-  - id: ID de la VLAN (1-4094)
-  - name: Nombre descriptivo
-  - ip_interface: IP del router en la VLAN (formato CIDR)
-  - ip_network: Red de la VLAN (formato CIDR)
+  - --action: "add"
+  - --id: ID de la VLAN (1-4094)
+  - --name: Nombre descriptivo
+  - --ip_interface: IP del router en la VLAN (formato CIDR)
+  - --ip_network: Red de la VLAN (formato CIDR)
 
 ### vlans start
 Iniciar VLANs (crear interfaces virtuales)

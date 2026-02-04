@@ -1,0 +1,199 @@
+html, body {
+    margin: 0;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    padding: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh;
+}
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background: rgba(255, 255, 255, 0.95);
+    padding: 30px;
+    border-radius: 12px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+}
+h2 {
+    color: #333;
+    margin-top: 0;
+    border-bottom: 3px solid #667eea;
+    padding-bottom: 10px;
+}
+.loading {
+    text-align: center;
+    padding: 40px;
+    color: #666;
+    font-size: 18px;
+}
+.vlan-card {
+    background: #f8f9fa;
+    border: 2.5px solid #333;
+    border-radius: 8px;
+    margin: 20px 0;
+    padding: 25px;
+    transition: all 0.3s;
+}
+.vlan-card:hover {
+    box-shadow: 0 6px 16px rgba(0,0,0,0.15);
+}
+.vlan-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 18px;
+    padding-bottom: 12px;
+    border-bottom: 2px solid #333;
+}
+.vlan-title {
+    font-size: 20px;
+    font-weight: bold;
+    color: #333;
+}
+.vlan-info {
+    font-size: 15px;
+    color: #555;
+    margin-top: 5px;
+}
+.toggle-container {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.toggle-switch {
+    position: relative;
+    width: 60px;
+    height: 30px;
+    background: #ccc;
+    border-radius: 15px;
+    cursor: pointer;
+    transition: background 0.3s;
+}
+.toggle-switch.active {
+    background: #28a745;
+}
+.toggle-switch::after {
+    content: '';
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: white;
+    top: 3px;
+    left: 3px;
+    transition: left 0.3s;
+}
+.toggle-switch.active::after {
+    left: 33px;
+}
+.toggle-label {
+    font-weight: bold;
+    color: #666;
+}
+.toggle-label.active {
+    color: #28a745;
+}
+.whitelist-section {
+    margin-top: 15px;
+    padding: 15px;
+    background: white;
+    border-radius: 6px;
+    border: 1px solid #e0e0e0;
+}
+.whitelist-section.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+.rules-list {
+    margin: 15px 0;
+}
+.rule-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px;
+    margin: 5px 0;
+    background: #f0f0f0;
+    border-radius: 4px;
+    border-left: 4px solid #667eea;
+}
+.rule-text {
+    font-family: 'Courier New', monospace;
+    color: #333;
+    font-size: 14px;
+}
+.btn-remove {
+    background: #dc3545;
+    color: white;
+    border: none;
+    padding: 5px 15px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.2s;
+}
+.btn-remove:hover {
+    background: #c82333;
+}
+.add-rule-form {
+    display: flex;
+    gap: 10px;
+    margin-top: 15px;
+    padding-top: 15px;
+    border-top: 2px solid #e0e0e0;
+}
+.add-rule-form input {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 14px;
+}
+.btn-add {
+    background: #28a745;
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.2s;
+}
+.btn-add:hover {
+    background: #218838;
+}
+.no-rules {
+    text-align: center;
+    padding: 20px;
+    color: #999;
+    font-style: italic;
+}
+.info-box {
+    background: #d1ecf1;
+    border: 1px solid #bee5eb;
+    border-radius: 6px;
+    padding: 15px;
+    margin-bottom: 20px;
+    color: #0c5460;
+}
+.warning-box {
+    background: #fff3cd;
+    border: 1px solid #ffeaa7;
+    border-radius: 6px;
+    padding: 15px;
+    margin-top: 15px;
+    color: #856404;
+}
+.status-badge {
+    display: inline-block;
+    padding: 4px 12px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: bold;
+}
+.status-enabled {
+    background: #d4edda;
+    color: #155724;
+}
+.status-disabled {
+    background: #f8d7da;
+    color: #721c24;
+}

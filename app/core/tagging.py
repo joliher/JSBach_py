@@ -1,14 +1,14 @@
 # app/core/tagging.py
 
 import os
-import re
-import subprocess
-from typing import Dict, Any, Tuple, Optional
+import json
+from typing import Dict, Any, Tuple
 from ..utils.global_functions import create_module_config_directory, create_module_log_directory
 from ..utils.validators import sanitize_interface_name
 from ..utils.helpers import (
     load_json_config, save_json_config, update_module_status, run_command
 )
+from .helpers import run_cmd, parse_vlan_range, format_vlan_list, tagging_bridge_exists
 
 # Config file in V4 structure
 CONFIG_FILE = os.path.abspath(
@@ -21,125 +21,16 @@ _save_config = lambda data: save_json_config(CONFIG_FILE, data)
 _update_status = lambda status: update_module_status(CONFIG_FILE, status)
 _sanitize_interface_name = sanitize_interface_name  # Alias para compatibilidad
 
-def _run_cmd(cmd, ignore_error=False):
-    """Execute command and return (success: bool, output: str)."""
-    success, output = run_command(cmd)
-    return success, output
+# Aliases para funciones de helpers
+_run_cmd = run_cmd
+_bridge_exists = tagging_bridge_exists
+_parse_vlan_range = parse_vlan_range
+_format_vlan_list = format_vlan_list
 
 
-def _bridge_exists() -> bool:
-    return os.path.exists("/sys/class/net/br0")
-
-
-def _parse_vlan_range(vlan_string: str) -> list:
-    """Parsea una sintaxis de VLAN con rangos como '1,2,3-10,12,14-15'.
-    
-    Soporta:
-    - Valores individuales: 1,2,3
-    - Rangos: 3-10 (expande a 3,4,5,6,7,8,9,10)
-    - Combinaciones: 1,2,3-10,12,14-15
-    - Orden arbitrario: 10-3,1,2 es igual a 1,2,3-10
-    
-    NO soporta espacios después de comas o en rangos:
-    - ❌ '3-10, 12' (espacio después de coma)
-    - ❌ '3 - 10' (espacios alrededor del guion)
-    
-    Retorna: lista ordenada y sin duplicados de VLANs como strings, o [] si es inválido
-    """
-    if not vlan_string or not isinstance(vlan_string, str):
-        return []
-    
-    # Validar que NO haya espacios después de comas o alrededor de guiones
-    # Formato válido: 1,2,3-10,12,14-15
-    if ' ' in vlan_string:
-        return []  # Inválido si hay espacios
-    
-    vlan_set = set()
-    
-    # Dividir por comas
-    parts = vlan_string.split(",")
-    
-    for part in parts:
-        if not part:  # Parte vacía
-            return []
-        
-        # Verificar si es un rango (contiene guion)
-        if "-" in part:
-            range_parts = part.split("-")
-            if len(range_parts) == 2:
-                try:
-                    start = int(range_parts[0])
-                    end = int(range_parts[1])
-                    # Validar rango de VLAN (1-4094)
-                    if start < 1 or start > 4094 or end < 1 or end > 4094:
-                        return []
-                    # Soportar rangos en ambas direcciones
-                    if start > end:
-                        start, end = end, start
-                    for vid in range(start, end + 1):
-                        vlan_set.add(str(vid))
-                except (ValueError, TypeError):
-                    return []
-            else:
-                return []  # Rango con más de un guion es inválido
-        else:
-            # Valor individual
-            try:
-                vid = int(part)
-                if 1 <= vid <= 4094:
-                    vlan_set.add(str(vid))
-                else:
-                    return []  # VLAN fuera de rango
-            except (ValueError, TypeError):
-                return []
-    
-    # Retornar ordenado
-    return sorted(list(vlan_set), key=int)
-
-
-def _format_vlan_list(vlan_list: list) -> str:
-    """Convierte una lista de VLANs a formato comprimido con rangos.
-    
-    Ejemplo: [1,2,3,4,5,10,11,12] → '1-5,10-12'
-    """
-    if not vlan_list:
-        return ""
-    
-    # Convertir todos a integers y ordenar
-    vlans = sorted(list(set(int(v) for v in vlan_list if str(v).isdigit())))
-    
-    if not vlans:
-        return ""
-    
-    result = []
-    range_start = vlans[0]
-    range_end = vlans[0]
-    
-    for i in range(1, len(vlans)):
-        if vlans[i] == range_end + 1:
-            # Continuar el rango
-            range_end = vlans[i]
-        else:
-            # Terminar el rango actual
-            if range_start == range_end:
-                result.append(str(range_start))
-            else:
-                result.append(f"{range_start}-{range_end}")
-            range_start = vlans[i]
-            range_end = vlans[i]
-    
-    # Terminar el último rango
-    if range_start == range_end:
-        result.append(str(range_start))
-    else:
-        result.append(f"{range_start}-{range_end}")
-    
-    return ",".join(result)
-
-
-# -----------------------------
+# --------------------------------
 # Acciones públicas (Admin API)
-# -----------------------------
+# --------------------------------
 
 def start(params: Dict[str, Any] = None) -> Tuple[bool, str]:
     create_module_config_directory("tagging")

@@ -1,110 +1,92 @@
-/* header.css - Estilos del header */
-
-.header {
-    background: #f8f9fa;
-    padding: var(--spacing-lg);
-    border-bottom: 2px solid var(--primary-color);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    box-shadow: var(--box-shadow);
+body { 
+      font-family: Arial, sans-serif; 
+      margin: 0; 
+      padding: 15px 0; 
+      background: #f8f9fa; 
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+}
+  h1 { 
+      color: #2A5B45; 
+      margin: 15px 0; 
+      font-size: 20px; 
+      text-align: center;
 }
 
-.header-content {
-    display: flex;
-    align-items: center;
-    gap: var(--spacing-lg);
-    flex: 1;
+  .home-icon { 
+      position: absolute; 
+      top: 12px; 
+      left: 12px; 
+      z-index: 1000; 
+}
+  .home-icon svg { 
+      cursor: pointer; 
+      transition: transform 0.15s ease-in-out; 
+}
+  .home-icon svg:hover { 
+      transform: scale(1.1); 
 }
 
-.header-logo {
-    font-size: 24px;
-    font-weight: 700;
-    color: var(--primary-color);
-    white-space: nowrap;
+  /* Contenedor de botones centrado */
+.button-container {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 10px 0;
+      max-width: 800px;
 }
 
-.header-title {
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--primary-color);
-    margin: 0;
+  /* Estilo unificado para todos los botones */
+  button { 
+      background-color: #eee; 
+      border: 1px solid #ccc; 
+      padding: 10px 18px; 
+      cursor: pointer; 
+      font-size: 14px; 
+      color: #000;
+      border-radius: 5px;
+      transition: background-color 0.2s, color 0.2s, transform 0.1s, box-shadow 0.1s;
 }
 
-.header-nav {
-    display: flex;
-    gap: var(--spacing-lg);
-    flex: 1;
-    justify-content: center;
-    flex-wrap: wrap;
+  button:hover { 
+      background-color: #66b3ff;  /* Azul suave */
+      color: white;               /* Texto blanco */
+      transform: translateY(-1px); /* Efecto sutil de “flotar” */
+      box-shadow: 0 2px 4px rgba(0,0,0,0.2);
 }
 
-.header-nav a {
-    padding: var(--spacing-md) var(--spacing-lg);
-    color: var(--primary-color);
-    font-weight: 500;
-    border-radius: var(--border-radius);
-    transition: all 0.2s;
+  button.active { 
+      background-color: #3399ff; 
+      color: white; 
+      border-color: #007acc; 
+      box-shadow: inset 0 4px 6px rgba(0,0,0,0.1); 
+      transform: translateY(0); 
 }
 
-.header-nav a:hover {
-    background: rgba(42, 91, 69, 0.1);
-    color: var(--primary-dark);
+  #user-container { 
+      position: absolute; 
+      top: 12px; 
+      right: 12px; 
+      color: #2A5B45; 
+      font-weight: bold; 
 }
 
-.header-nav a.active {
-    background: var(--secondary-color);
-    color: white;
+  #logout-btn { 
+      margin-left: 10px; 
+      background-color: #dc3545; 
+      color: white; 
+      border: none; 
+      padding: 5px 10px; 
+      cursor: pointer; 
+      border-radius: 5px;
+      transition: background-color 0.2s;
 }
 
-.header-actions {
-    display: flex;
-    gap: var(--spacing-md);
-    align-items: center;
-}
-
-.home-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
-    border-radius: var(--border-radius);
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.home-icon:hover {
-    background: rgba(42, 91, 69, 0.1);
-    transform: scale(1.05);
-}
-
-.home-icon svg {
-    width: 24px;
-    height: 24px;
-    stroke: var(--primary-color);
-    fill: none;
-    stroke-width: 2;
-}
-
-/* Responsive */
-@media (max-width: 768px) {
-    .header {
-        flex-direction: column;
-        gap: var(--spacing-lg);
-    }
-
-    .header-content {
-        width: 100%;
-    }
-
-    .header-nav {
-        width: 100%;
-        justify-content: flex-start;
-    }
-
-    .header-nav a {
-        padding: var(--spacing-sm) var(--spacing-md);
-        font-size: 14px;
-    }
+#logout-btn:hover {
+      background-color: #e5534b;
 }

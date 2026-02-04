@@ -10,27 +10,32 @@ Ver el estado actual del DMZ y destinos configurados
 Ejemplo:
   dmz status
 
+
 ### dmz config
 Añadir un destino DMZ
 
-Ejemplo:
-  dmz config {"ip": "192.168.3.10", "port": 80, "protocol": "tcp"}
+Ejemplo (recomendado):
+  dmz config --ip 192.168.3.10 --port 80 --protocol tcp
+
+Para arrays complejos (legacy compatible):
+  dmz config --params '{"ip": "192.168.3.10", "port": 80, "protocol": "tcp"}'
 
 Parámetros:
-  - ip: IP del servidor en la red local
-  - port: Puerto del servicio
-  - protocol: Protocolo (tcp o udp)
+  - --ip: IP del servidor en la red local
+  - --port: Puerto del servicio
+  - --protocol: Protocolo (tcp o udp)
+
 
 ### dmz eliminar
 Eliminar un destino DMZ
 
 Ejemplo:
-  dmz eliminar {"ip": "192.168.3.10", "port": 80, "protocol": "tcp"}
+  dmz eliminar --ip 192.168.3.10 --port 80 --protocol tcp
 
 Parámetros:
-  - ip: IP del destino
-  - port: Puerto del servicio
-  - protocol: Protocolo
+  - --ip: IP del destino
+  - --port: Puerto del servicio
+  - --protocol: Protocolo
 
 Funcionalidad:
   - Elimina el destino de la configuración
@@ -66,14 +71,15 @@ Reiniciar DMZ
 Ejemplo:
   dmz restart
 
+
 ### dmz aislar
 Aislar un host DMZ completamente (bloqueo bidireccional)
 
 Ejemplo:
-  dmz aislar {"ip": "10.0.5.50"}
+  dmz aislar --ip 10.0.5.50
 
 Parámetros:
-  - ip: IP del host DMZ a aislar
+  - --ip: IP del host DMZ a aislar
 
 Funcionalidad:
   - Inserta RETURN en PREROUTING_PROTECTION posición 1 (nat table, -d IP)

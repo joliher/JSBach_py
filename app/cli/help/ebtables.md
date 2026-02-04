@@ -1,576 +1,409 @@
-# Módulo EBTABLES - Aislamiento de VLANs a Nivel L2
+# Módulo EBTABLES - PVLAN y MAC Whitelist
 
 ## Descripción General
 
-El módulo **ebtables** proporciona aislamiento de VLANs a nivel de capa 2 (enlace de datos) utilizando el framework ebtables de Linux. Este módulo permite controlar el tráfico entre VLANs y hacia la WAN, implementando políticas de seguridad a nivel de puente Ethernet.
+El módulo **ebtables** proporciona:
+- **PVLAN (Private VLAN)**: Aislamiento de VLANs a nivel de capa 2
+- **MAC Whitelist**: Control granular de acceso por dirección MAC en VLAN 1
+
+Utiliza el framework ebtables de Linux para filtrado a nivel de enlace de datos.
 
 ### Características Principales
 
-- **Aislamiento Inter-VLAN**: Bloquea el tráfico directo entre VLANs diferentes
-- **Control de acceso a WAN**: Permite/deniega acceso de VLANs específicas a la interfaz WAN
-- **Arquitectura jerárquica**: Utiliza cadenas personalizadas por VLAN para mejor organización
-- **Integración completa**: Se sincroniza con módulos WAN, VLANs y Tagging
-- **Gestión dinámica**: Aplica/remueve reglas sin reiniciar el sistema
+- **PVLAN**: Aislamiento total de VLANs (solo comunicación con WAN)
+- **MAC Whitelist (VLAN 1)**: Control de acceso por dirección MAC
+- **Arquitectura jerárquica**: Cadenas personalizadas `FORWARD_VLAN_X`
+- **Integración completa**: Sincronización con WAN, VLANs y Tagging
+- **Gestión dinámica**: Aplicación de reglas sin reiniciar
 
 ### Dependencias
 
-El módulo **ebtables** requiere que los siguientes módulos estén **ACTIVOS**:
-- **WAN**: Para determinar la interfaz de salida a Internet
-- **VLANs**: Para obtener la lista de VLANs configuradas
-- **Tagging**: Para mapear interfaces físicas a VLANs
+El módulo requiere que estén **ACTIVOS**:
+- **WAN**: Interfaz de salida a Internet
+- **VLANs**: Configuración de redes VLAN
+- **Tagging**: Mapeo de interfaces físicas a VLANs
 
 ---
 
-## Arquitectura
+## Comandos CLI
+
+### Comandos Básicos
+
+```bash
+ebtables status     # Ver estado del módulo
+ebtables start      # Iniciar módulo
+ebtables stop       # Detener módulo
+ebtables restart    # Reiniciar módulo
+```
+
+### PVLAN (Aislamiento de VLANs)
+
+#### Aislar VLAN (Activar PVLAN)
+```bash
+ebtables aislar --vlan_id <ID>
+```
+
+**Ejemplo:**
+```bash
+ebtables aislar --vlan_id 2
+```
+
+**Efecto:** Solo permite comunicación con WAN, bloquea tráfico entre hosts de la misma VLAN.
+
+#### Desaislar VLAN (Desactivar PVLAN)
+```bash
+ebtables desaislar --vlan_id <ID>
+```
+
+**Ejemplo:**
+```bash
+ebtables desaislar --vlan_id 2
+```
+
+### MAC Whitelist (Solo VLAN 1)
+
+#### Agregar MAC
+```bash
+ebtables add_mac --mac <MAC_ADDRESS>
+```
+
+**Ejemplos:**
+```bash
+ebtables add_mac --mac AA:BB:CC:DD:EE:FF
+ebtables add_mac --mac aa-bb-cc-dd-ee-ff
+```
+
+**Notas:**
+- Formatos aceptados: `AA:BB:CC:DD:EE:FF` o `AA-BB-CC-DD-EE-FF`
+- Se normaliza automáticamente a mayúsculas con dos puntos
+- Se puede agregar MACs con whitelist deshabilitada
+
+#### Eliminar MAC
+```bash
+ebtables remove_mac --mac <MAC_ADDRESS>
+```
+
+**Ejemplo:**
+```bash
+ebtables remove_mac --mac AA:BB:CC:DD:EE:FF
+```
+
+#### Habilitar Whitelist
+```bash
+ebtables enable_whitelist
+```
+
+**Efecto:** Solo las MACs en la lista pueden comunicarse. Habilitada por defecto.
+
+#### Deshabilitar Whitelist
+```bash
+ebtables disable_whitelist
+```
+
+**Advertencia:** Todas las MACs podrán comunicarse sin restricciones.
+
+#### Mostrar Whitelist
+```bash
+ebtables show_whitelist
+```
+
+Muestra:
+- Estado (habilitada/deshabilitada)
+- Lista de MACs
+- Total de entradas
+
+---
+
+## Arquitectura Técnica
 
 ### Estructura de Cadenas
 
-El módulo crea una arquitectura jerárquica de cadenas en ebtables:
-
 ```
 FORWARD (cadena principal)
-  ├─> VLAN_1 (cadena personalizada)
-  │   ├─ Regla: Permitir hacia WAN
-  │   ├─ Regla: Permitir entre interfaces de VLAN 1
-  │   └─ Regla: DROP resto
-  ├─> VLAN_2 (cadena personalizada)
-  │   ├─ Regla: Denegar hacia WAN
-  │   ├─ Regla: Permitir entre interfaces de VLAN 2
-  │   └─ Regla: DROP resto
+  ├─> Redirección: -i eth1.1 -j FORWARD_VLAN_1
+  ├─> Redirección: -i eth1.2 -j FORWARD_VLAN_2
   └─> ...
+
+FORWARD_VLAN_1 (VLAN 1 - Admin)
+  ├─> WAN rules (si PVLAN activa):
+  │   ├─ -i wan -j ACCEPT
+  │   └─ -o wan -j ACCEPT
+  ├─> MAC Whitelist (si habilitada):
+  │   ├─ -s AA:BB:CC:DD:EE:FF -j ACCEPT
+  │   ├─ -s 11:22:33:44:55:66 -j ACCEPT
+  │   └─ ...
+  └─> DROP (final)
+
+FORWARD_VLAN_2 (Otras VLANs)
+  ├─> WAN rules (si PVLAN activa):
+  │   ├─ -i wan -j ACCEPT
+  │   └─ -o wan -j ACCEPT
+  └─> DROP (solo si PVLAN activa)
 ```
 
-### Flujo de Trabajo
+### Lógica de Aplicación
 
-1. **Validación de dependencias**: Verifica que WAN, VLANs y Tagging estén activos
-2. **Sincronización de VLANs**: Lee configuración de vlans.json y ebtables.json
-3. **Creación de cadenas**: Genera cadena personalizada por cada VLAN
-4. **Aplicación de reglas**: Configura aislamiento según la configuración
-5. **Actualización de estado**: Marca el módulo como activo/inactivo
+**VLAN con PVLAN activa:**
+1. Crear cadena `FORWARD_VLAN_X`
+2. Redirigir tráfico de interfaces VLAN a cadena
+3. Permitir tráfico WAN (`-i wan`, `-o wan`)
+4. DROP resto del tráfico
+
+**VLAN 1 con Whitelist:**
+1. Crear cadena `FORWARD_VLAN_1`
+2. Redirigir tráfico de interfaces VLAN 1
+3. Si PVLAN: Agregar reglas WAN
+4. Agregar reglas MAC whitelist
+5. DROP resto del tráfico
+
+**Compatibilidad:** PVLAN y Whitelist pueden estar activas simultáneamente en VLAN 1.
 
 ---
 
-## Archivo de Configuración
+## Flujo de Trabajo Típico
 
-### Ubicación
-```
-/opt/JSBach_V4.0/config/ebtables/ebtables.json
-```
+### Configurar PVLAN
 
-### Estructura JSON
-```json
-{
-    "vlans": {
-        "10": {
-            "id": 10,
-            "name": "Oficina",
-            "isolated": true,
-            "allow_wan": false
-        },
-        "20": {
-            "id": 20,
-            "name": "Visitantes",
-            "isolated": true,
-            "allow_wan": true
-        }
-    },
-    "status": 1
-}
-```
-
-### Campos
-
-| Campo | Tipo | Descripción |
-|-------|------|-------------|
-| `vlans` | object | Diccionario de VLANs con su configuración de aislamiento |
-| `vlans.{id}` | object | Configuración específica de una VLAN |
-| `vlans.{id}.id` | int | ID de la VLAN (debe coincidir con vlans.json) |
-| `vlans.{id}.name` | string | Nombre descriptivo de la VLAN |
-| `vlans.{id}.isolated` | bool | `true` = aislada, `false` = sin aislamiento |
-| `vlans.{id}.allow_wan` | bool | `true` = permite acceso a WAN, `false` = bloquea WAN |
-| `status` | int | Estado del módulo: `0` = inactivo, `1` = activo |
-
----
-
-## Comandos Disponibles
-
-### 1. `start` - Iniciar Ebtables
-
-**Descripción**: Inicia el módulo ebtables, aplicando reglas de aislamiento a todas las VLANs configuradas.
-
-**Sintaxis CLI**:
 ```bash
+# 1. Verificar dependencias
+wan status
+vlans status
+tagging status
+
+# 2. Iniciar ebtables si no está activo
 ebtables start
-```
 
-**Comportamiento**:
-1. Valida que WAN, VLANs y Tagging estén activos
-2. Limpia reglas previas de ebtables
-3. Lee configuración de VLANs desde vlans.json
-4. Crea cadenas personalizadas por VLAN
-5. Aplica reglas de aislamiento según ebtables.json
-6. Actualiza status a `1` (activo)
+# 3. Aislar VLAN 2
+ebtables aislar --vlan_id 2
 
-**Ejemplo de salida**:
-```
-Ebtables iniciado correctamente
-VLANs aisladas:
-  - VLAN 10: Aislada ✓ | Acceso WAN: No ✗
-  - VLAN 20: Aislada ✓ | Acceso WAN: Sí ✓
-```
-
-**Errores comunes**:
-- `"WAN no está activa"`: El módulo WAN debe estar iniciado primero
-- `"VLANs no están activas"`: El módulo VLANs debe estar iniciado primero
-- `"Tagging no está activo"`: El módulo Tagging debe estar iniciado primero
-- `"No hay VLANs configuradas"`: Configura al menos una VLAN en vlans.json
-
----
-
-### 2. `stop` - Detener Ebtables
-
-**Descripción**: Detiene el módulo ebtables, eliminando todas las reglas y cadenas personalizadas.
-
-**Sintaxis CLI**:
-```bash
-ebtables stop
-```
-
-**Comportamiento**:
-1. Lee configuración de VLANs
-2. Elimina reglas de aislamiento para cada VLAN
-3. Elimina cadenas personalizadas (VLAN_X)
-4. Actualiza status a `0` (inactivo)
-
-**Ejemplo de salida**:
-```
-Ebtables detenido correctamente. Todas las reglas eliminadas.
-```
-
-**Nota**: Después de `stop`, todas las VLANs pueden comunicarse libremente (sin aislamiento).
-
----
-
-### 3. `restart` - Reiniciar Ebtables
-
-**Descripción**: Reinicia el módulo ebtables, equivalente a ejecutar `stop` seguido de `start`.
-
-**Sintaxis CLI**:
-```bash
-ebtables restart
-```
-
-**Comportamiento**:
-1. Ejecuta `stop` (limpia reglas)
-2. Ejecuta `start` (recrea reglas)
-
-**Uso recomendado**: Después de cambios en configuración de VLANs o Tagging.
-
----
-
-### 4. `status` - Consultar Estado
-
-**Descripción**: Muestra el estado actual del módulo ebtables y sus reglas activas.
-
-**Sintaxis CLI**:
-```bash
+# 4. Verificar
 ebtables status
 ```
 
-**Ejemplo de salida (activo)**:
-```
-Estado de Ebtables:
-====================
-Estado: 🟢 ACTIVO
-
-VLANs configuradas:
-  - VLAN 10 (Oficina):
-      Aislada: Sí
-      Acceso WAN: No
-      Interfaces: eth1.10, eth2.10
-  
-  - VLAN 20 (Visitantes):
-      Aislada: Sí
-      Acceso WAN: Sí
-      Interfaces: eth1.20
-
-Dependencias:
-  ✓ WAN: ACTIVA (eno1)
-  ✓ VLANs: ACTIVAS (2 VLANs)
-  ✓ Tagging: ACTIVO (2 interfaces)
-```
-
-**Ejemplo de salida (inactivo)**:
-```
-Estado de Ebtables:
-====================
-Estado: 🔴 INACTIVO
-
-Para iniciar el módulo, ejecute: ebtables start
-```
-
----
-
-### 5. `aislar` - Aislar VLAN
-
-**Descripción**: Aplica aislamiento a una VLAN específica. Bloquea tráfico inter-VLAN y opcionalmente hacia WAN.
-
-**Sintaxis CLI**:
-```bash
-ebtables aislar vlan_id=<ID> allow_wan=<true|false>
-```
-
-**Parámetros**:
-| Parámetro | Tipo | Requerido | Descripción |
-|-----------|------|-----------|-------------|
-| `vlan_id` | int | Sí | ID de la VLAN a aislar (debe existir en vlans.json) |
-| `allow_wan` | bool | No | `true` = permite WAN, `false` = bloquea WAN (default: `false`) |
-
-**Ejemplos**:
-
-Aislar VLAN 10 sin acceso a WAN:
-```bash
-ebtables aislar vlan_id=10 allow_wan=false
-```
-
-Aislar VLAN 20 con acceso a WAN:
-```bash
-ebtables aislar vlan_id=20 allow_wan=true
-```
-
-**Comportamiento**:
-1. Valida que la VLAN exista en vlans.json
-2. Valida que ebtables esté activo
-3. Crea cadena personalizada VLAN_X si no existe
-4. Aplica reglas de aislamiento:
-   - Permite tráfico entre interfaces de la misma VLAN
-   - Permite/deniega acceso a WAN según `allow_wan`
-   - Bloquea tráfico hacia otras VLANs
-5. Actualiza ebtables.json con la configuración
-
-**Ejemplo de salida**:
-```
-VLAN 10 aislada correctamente
-  - Aislamiento inter-VLAN: Activo
-  - Acceso a WAN: Denegado
-  - Interfaces aisladas: eth1.10, eth2.10
-```
-
-**Errores comunes**:
-- `"VLAN X no existe"`: La VLAN no está configurada en vlans.json
-- `"Ebtables no está activo"`: Ejecuta `ebtables start` primero
-- `"Error al crear cadena"`: Verifica permisos de root
-
----
-
-### 6. `desaislar` - Remover Aislamiento
-
-**Descripción**: Remueve el aislamiento de una VLAN específica, permitiendo comunicación libre.
-
-**Sintaxis CLI**:
-```bash
-ebtables desaislar vlan_id=<ID>
-```
-
-**Parámetros**:
-| Parámetro | Tipo | Requerido | Descripción |
-|-----------|------|-----------|-------------|
-| `vlan_id` | int | Sí | ID de la VLAN a desaislar |
-
-**Ejemplo**:
-```bash
-ebtables desaislar vlan_id=10
-```
-
-**Comportamiento**:
-1. Valida que ebtables esté activo
-2. Elimina reglas de aislamiento de la VLAN
-3. Elimina cadena personalizada VLAN_X
-4. Actualiza ebtables.json (marca `isolated: false`)
-
-**Ejemplo de salida**:
-```
-VLAN 10 desaislada correctamente. Tráfico libre permitido.
-```
-
----
-
-## Reglas de Ebtables Aplicadas
-
-### Reglas por VLAN Aislada (allow_wan = false)
+### Gestionar Whitelist VLAN 1
 
 ```bash
-# Ejemplo para VLAN 10 sin acceso a WAN
+# 1. Agregar MACs de administradores
+ebtables add_mac --mac 00:11:22:33:44:55
+ebtables add_mac --mac AA:BB:CC:DD:EE:FF
 
-# 1. Salto a cadena personalizada
-ebtables -A FORWARD -i eth1.10 -j VLAN_10
-ebtables -A FORWARD -i eth2.10 -j VLAN_10
+# 2. Verificar configuración
+ebtables show_whitelist
 
-# 2. Dentro de la cadena VLAN_10:
-# Bloquear acceso a WAN
-ebtables -A VLAN_10 -o eno1 -j DROP
+# 3. Habilitar si está deshabilitada
+ebtables enable_whitelist
 
-# Permitir tráfico entre interfaces de la misma VLAN
-ebtables -A VLAN_10 -o eth1.10 -j ACCEPT
-ebtables -A VLAN_10 -o eth2.10 -j ACCEPT
+# 4. Para acceso temporal, deshabilitar
+ebtables disable_whitelist
 
-# Bloquear todo lo demás (otras VLANs)
-ebtables -A VLAN_10 -j DROP
+# 5. Volver a habilitar cuando termine
+ebtables enable_whitelist
 ```
 
-### Reglas por VLAN Aislada (allow_wan = true)
+### Reiniciar con Nueva Configuración
 
 ```bash
-# Ejemplo para VLAN 20 con acceso a WAN
+# Eliminar configuración actual
+ebtables stop
 
-# 1. Salto a cadena personalizada
-ebtables -A FORWARD -i eth1.20 -j VLAN_20
+# Modificar VLANs si es necesario
+vlans config --action add --id 3 --name Test --ip_interface 10.0.3.1/24 --ip_network 10.0.3.0/24
 
-# 2. Dentro de la cadena VLAN_20:
-# Permitir acceso a WAN
-ebtables -A VLAN_20 -o eno1 -j ACCEPT
-
-# Permitir tráfico entre interfaces de la misma VLAN
-ebtables -A VLAN_20 -o eth1.20 -j ACCEPT
-
-# Bloquear todo lo demás (otras VLANs)
-ebtables -A VLAN_20 -j DROP
-```
-
----
-
-## Logs del Módulo
-
-### Ubicación
-```
-/opt/JSBach_V4.0/logs/ebtables/actions.log
-```
-
-### Formato
-```
-DD/MM/YYYY HH:MM:SS - LEVEL - acción - ESTADO: mensaje
-```
-
-### Ejemplos de Logs
-
-```
-02/02/2026 20:55:10 - INFO - start - SUCCESS: Ebtables iniciado. 2 VLANs aisladas
-02/02/2026 20:56:15 - INFO - aislar - SUCCESS: VLAN 10 aislada (WAN: No)
-02/02/2026 20:57:22 - INFO - desaislar - SUCCESS: VLAN 10 desaislada
-02/02/2026 20:58:00 - ERROR - start - ERROR: Dependencias no cumplidas. WAN no está activa
-02/02/2026 20:59:12 - INFO - stop - SUCCESS: Ebtables detenido. Todas las reglas eliminadas
-```
-
----
-
-## Casos de Uso
-
-### Caso 1: Aislar VLAN de Invitados (solo acceso a Internet)
-
-**Objetivo**: Los invitados pueden acceder a Internet pero no a recursos internos.
-
-**Configuración**:
-1. Crear VLAN de invitados:
-```bash
-vlans config action=add id=100 name=Invitados ip=10.100.1.1 netmask=255.255.255.0
-vlans start
-```
-
-2. Configurar tagging en interfaces:
-```bash
-tagging config action=add interface=eth1 vlan_tag=100
-tagging start
-```
-
-3. Aislar VLAN con acceso a WAN:
-```bash
-ebtables start
-ebtables aislar vlan_id=100 allow_wan=true
-```
-
-**Resultado**: VLAN 100 puede acceder a Internet (WAN) pero no a otras VLANs internas.
-
----
-
-### Caso 2: Aislar VLAN de Servidores (sin acceso a Internet)
-
-**Objetivo**: Servidores internos aislados completamente, sin salida a Internet.
-
-**Configuración**:
-```bash
-# Crear VLAN de servidores
-vlans config action=add id=50 name=Servidores ip=10.50.1.1 netmask=255.255.255.0
-vlans start
-
-# Aislar sin acceso a WAN
-ebtables start
-ebtables aislar vlan_id=50 allow_wan=false
-```
-
-**Resultado**: VLAN 50 no puede acceder a Internet ni a otras VLANs.
-
----
-
-### Caso 3: Segmentación Completa de Red
-
-**Objetivo**: Múltiples VLANs aisladas con diferentes políticas de acceso a WAN.
-
-**Configuración**:
-```bash
-# Iniciar ebtables
+# Reiniciar ebtables (sincroniza con VLANs)
 ebtables start
 
-# VLAN 10 (Administración) - Sin acceso a WAN
-ebtables aislar vlan_id=10 allow_wan=false
-
-# VLAN 20 (Empleados) - Con acceso a WAN
-ebtables aislar vlan_id=20 allow_wan=true
-
-# VLAN 30 (DMZ) - Con acceso a WAN
-ebtables aislar vlan_id=30 allow_wan=true
-
-# VLAN 100 (Invitados) - Solo acceso a WAN
-ebtables aislar vlan_id=100 allow_wan=true
+# La VLAN 1 se crea con whitelist habilitada por defecto
 ```
 
 ---
 
-## Integración con Otros Módulos
+## Archivos de Configuración
 
-### Firewall
-El módulo **ebtables** trabaja en capa 2, mientras que **firewall** opera en capa 3. Ambos pueden coexistir:
-- **ebtables**: Controla tráfico a nivel de puente Ethernet (MAC addresses)
-- **firewall**: Controla tráfico a nivel de IP (iptables)
+### ebtables.json
 
-Recomendación: Usar ebtables para aislamiento de VLANs y firewall para reglas específicas de IPs.
+Ubicación: `/opt/JSBach_V4.0/config/ebtables/ebtables.json`
 
-### NAT
-NAT opera después de ebtables. Si una VLAN tiene `allow_wan=true`, el tráfico puede ser traducido por NAT.
+```json
+{
+  "status": 1,
+  "wan_interface": "eno1",
+  "vlans": {
+    "1": {
+      "name": "Admin",
+      "isolated": false,
+      "mac_whitelist_enabled": true,
+      "mac_whitelist": [
+        "AA:BB:CC:DD:EE:FF",
+        "11:22:33:44:55:66"
+      ]
+    },
+    "2": {
+      "name": "DMZ",
+      "isolated": true
+    }
+  }
+}
+```
 
-### DMZ
-DMZ puede redirigir tráfico a VLANs aisladas. Configura ebtables para permitir acceso WAN en VLANs con servidores DMZ.
+**Campos:**
+- `status`: 0 = inactivo, 1 = activo
+- `wan_interface`: Interfaz WAN detectada
+- `vlans.<id>.isolated`: PVLAN activa (true) o inactiva (false)
+- `vlans.1.mac_whitelist_enabled`: Whitelist habilitada
+- `vlans.1.mac_whitelist`: Array de MACs autorizadas
 
 ---
 
 ## Troubleshooting
 
-### Problema: "Dependencias no cumplidas"
+### Error: "Módulo inactivo"
 
-**Causa**: WAN, VLANs o Tagging no están activos.
+**Causa:** Dependencias no activas o módulo detenido.
 
-**Solución**:
+**Solución:**
 ```bash
-# Verificar estado
+# Verificar dependencias
 wan status
 vlans status
 tagging status
 
-# Iniciar módulos faltantes
+# Iniciar las que falten
 wan start
 vlans start
 tagging start
 
-# Reintentar ebtables
+# Iniciar ebtables
 ebtables start
 ```
 
----
+### Error: "VLAN no configurada"
 
-### Problema: "VLAN X no existe en configuración"
+**Causa:** La VLAN no existe en vlans.json.
 
-**Causa**: La VLAN no está configurada en vlans.json.
-
-**Solución**:
+**Solución:**
 ```bash
-# Verificar VLANs configuradas
+# Ver VLANs disponibles
 vlans status
 
-# Agregar VLAN faltante
-vlans config action=add id=X name=NombreVLAN ip=10.X.1.1 netmask=255.255.255.0
-vlans restart
+# Configurar VLAN
+vlans config --action add --id 2 --name Test --ip_interface 10.0.2.1/24 --ip_network 10.0.2.0/24
+vlans start
 
-# Reintentar aislamiento
-ebtables aislar vlan_id=X allow_wan=true
+# Reiniciar ebtables
+ebtables restart
 ```
 
----
+### Whitelist no Funciona
 
-### Problema: Tráfico entre VLANs aún funciona después de aislar
-
-**Causa**: Posiblemente hay routing a nivel IP o ebtables no está activo.
-
-**Solución**:
+**Diagnóstico:**
 ```bash
-# Verificar estado de ebtables
-ebtables status
+# Ver estado
+ebtables show_whitelist
 
-# Listar reglas activas
-ebtables -L --Lc
+# Verificar si está habilitada
+ebtables status
+```
+
+**Soluciones:**
+```bash
+# Habilitar whitelist
+ebtables enable_whitelist
+
+# Verificar reglas (como root)
+sudo ebtables -L FORWARD_VLAN_1 --Ln
 
 # Reiniciar módulo
 ebtables restart
 ```
 
----
+### MAC No Se Agrega
 
-### Problema: No hay acceso a Internet después de aislar con allow_wan=true
+**Causa:** Formato inválido o duplicado.
 
-**Causa**: NAT o WAN puede tener problemas.
-
-**Solución**:
+**Solución:**
 ```bash
-# Verificar WAN
-wan status
+# Usar formato correcto
+ebtables add_mac --mac AA:BB:CC:DD:EE:FF
 
-# Verificar NAT
-nat status
+# Verificar si ya existe
+ebtables show_whitelist
 
-# Verificar reglas de ebtables
-ebtables -L VLAN_X
-
-# Desaislar temporalmente para diagnosticar
-ebtables desaislar vlan_id=X
+# Ver logs
+sudo journalctl -u jsbach -f
 ```
 
 ---
 
-## Comandos de Diagnóstico
+## Comandos de Depuración
 
-### Ver todas las reglas de ebtables
+### Ver Reglas Ebtables (Como Root)
+
 ```bash
-ebtables -L --Lc
+# Ver cadena FORWARD
+sudo ebtables -L FORWARD --Ln
+
+# Ver cadena específica de VLAN
+sudo ebtables -L FORWARD_VLAN_1 --Ln
+sudo ebtables -L FORWARD_VLAN_2 --Ln
+
+# Ver todas las cadenas
+sudo ebtables -L --Ln
 ```
 
-### Ver reglas de una cadena específica
+### Ver Logs del Módulo
+
 ```bash
-ebtables -L VLAN_10 --Lc
+# Ver logs en tiempo real
+sudo journalctl -u jsbach -f
+
+# Filtrar por ebtables
+sudo journalctl -u jsbach | grep -i ebtables
+
+# Ver acciones recientes
+cat /opt/JSBach_V4.0/logs/ebtables/actions.log
 ```
 
-### Ver estadísticas de paquetes
-```bash
-ebtables -L VLAN_10 --Lc --Ln
-```
+### Verificar Configuración
 
-### Limpiar manualmente todas las reglas
 ```bash
-ebtables -F
-ebtables -X
+# Ver archivo de configuración
+cat /opt/JSBach_V4.0/config/ebtables/ebtables.json | jq
+
+# Verificar interfaces taggeadas
+cat /opt/JSBach_V4.0/config/tagging/tagging.json | jq
 ```
 
 ---
 
-## Notas de Seguridad
+## Notas Importantes
 
-1. **Permisos root**: Ebtables requiere privilegios de superusuario
-2. **Persistencia**: Las reglas se pierden al reiniciar. Use `ebtables start` en el arranque
-3. **Verificación**: Siempre ejecute `status` después de cambios para validar configuración
-4. **Backup**: Mantenga respaldos de ebtables.json antes de cambios masivos
+1. **VLAN 1 es Especial**: Es la única con whitelist de MAC
+2. **Whitelist por Defecto**: En instalaciones nuevas, VLAN 1 tiene whitelist habilitada
+3. **Compatibilidad**: PVLAN y MAC whitelist pueden coexistir en VLAN 1
+4. **Persistencia**: Configuración guardada en JSON, se mantiene entre reinicios
+5. **Formato MAC**: Se normaliza automáticamente (mayúsculas con dos puntos)
+6. **Sincronización**: Al hacer `start` o `restart`, se sincroniza con VLANs activas
+7. **Limpieza**: Al hacer `stop`, se eliminan todas las cadenas y reglas
 
 ---
 
-## Referencias
+## Integración con Otros Módulos
 
-- Documentación oficial de ebtables: http://ebtables.netfilter.org/
-- Integración con VLANs: Ver `/app/cli/help/vlans.md`
-- Integración con Tagging: Ver `/app/cli/help/tagging.md`
-- Logs del sistema: `/opt/JSBach_V4.0/logs/ebtables/actions.log`
+### Con Firewall
+- **Firewall** opera en capa 3 (IP)
+- **Ebtables** opera en capa 2 (MAC/Ethernet)
+- Ambos pueden estar activos simultáneamente
+- Ebtables se evalúa ANTES que firewall (más bajo nivel)
+
+### Con VLANs/Tagging
+- Ebtables se sincroniza automáticamente con cambios en VLANs
+- Al agregar/eliminar VLANs, hacer `ebtables restart`
+- Depende del mapeo de interfaces del módulo Tagging
+
+### Con NAT/WAN
+- Requiere saber la interfaz WAN para reglas de PVLAN
+- NAT opera después de ebtables en el flujo de paquetes
+
+---
+
+**Ayuda del módulo EBTABLES - JSBach V4.0**

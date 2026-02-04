@@ -47,7 +47,19 @@ Las credenciales se configuran durante la instalación y se almacenan en `/opt/J
 
 ### Formato general
 ```
-<módulo> <acción> [--params '{json}']
+<módulo> <acción> [--key value ...]
+```
+
+**Nueva sintaxis (recomendada):**
+```bash
+ebtables add_mac --mac AA:BB:CC:DD:EE:FF
+dmz add_destination --ip 10.0.2.5 --port 80
+firewall add_rule --vlan_id 1 --target ACCEPT
+```
+
+**Sintaxis legacy (compatible):**
+```bash
+<módulo> <acción> --params '{"key": "value"}'
 ```
 
 ### Módulos disponibles
@@ -57,6 +69,7 @@ Las credenciales se configuran durante la instalación y se almacenan en `/opt/J
 - **dmz** - Zona desmilitarizada
 - **vlans** - Redes VLAN
 - **tagging** - Etiquetado de tráfico
+- **ebtables** - PVLAN (Private VLAN) y MAC whitelist
 
 ### Acciones comunes
 - `start` - Iniciar el módulo
@@ -85,12 +98,15 @@ wan status
 
 #### Configurar con DHCP
 ```bash
-wan config {"mode": "dhcp", "interface": "eth0"}
+wan config --mode dhcp --interface eth0
 ```
 
 #### Configurar con IP estática
 ```bash
-wan config {"mode": "static", "interface": "eth0", "ip": "192.168.1.100", "netmask": "255.255.255.0", "gateway": "192.168.1.1", "dns": ["8.8.8.8", "8.8.4.4"]}
+wan config --mode static --interface eth0 --ip 192.168.1.100 --netmask 255.255.255.0 --gateway 192.168.1.1
+
+# Nota: Para múltiples DNS, usar sintaxis JSON legacy:
+wan config --params '{"mode": "static", "interface": "eth0", "ip": "192.168.1.100", "netmask": "255.255.255.0", "gateway": "192.168.1.1", "dns": ["8.8.8.8", "8.8.4.4"]}'
 ```
 
 #### Iniciar WAN
@@ -118,7 +134,10 @@ Network Address Translation para compartir conexión a Internet.
 
 #### Configurar NAT
 ```bash
-nat config {"wan_interface": "eth0", "lan_interfaces": ["eth1", "eth2"]}
+nat config --wan_interface eth0
+
+# Nota: Para múltiples interfaces LAN, usar sintaxis JSON legacy:
+nat config --params '{"wan_interface": "eth0", "lan_interfaces": ["eth1", "eth2"]}'
 ```
 
 #### Ver estado
@@ -173,24 +192,27 @@ firewall restart
 
 #### Habilitar whitelist en una VLAN
 ```bash
-firewall enable_whitelist {"vlan_id": 10, "whitelist": ["8.8.8.8", "1.1.1.1", "208.67.222.222"]}
+firewall enable_whitelist --vlan_id 10
+
+# Nota: Para especificar IPs en la whitelist, usar sintaxis JSON legacy:
+firewall enable_whitelist --params '{"vlan_id": 10, "whitelist": ["8.8.8.8", "1.1.1.1", "208.67.222.222"]}'
 ```
 
 #### Deshabilitar whitelist
 ```bash
-firewall disable_whitelist {"vlan_id": 10}
+firewall disable_whitelist --vlan_id 10
 ```
 
 ### Gestión de reglas
 
 #### Añadir regla a whitelist
 ```bash
-firewall add_rule {"vlan_id": 10, "rule": "4.4.4.4"}
+firewall add_rule --vlan_id 10 --rule 4.4.4.4
 ```
 
 #### Eliminar regla de whitelist
 ```bash
-firewall remove_rule {"vlan_id": 10, "rule": "4.4.4.4"}
+firewall remove_rule --vlan_id 10 --rule 4.4.4.4
 ```
 
 ### Restricción de VLANs (botón RESTRINGIR)
@@ -203,12 +225,12 @@ Bloquea el acceso al router (INPUT) desde una VLAN.
 
 #### Restringir una VLAN
 ```bash
-firewall restrict {"vlan_id": 20}
+firewall restrict --vlan_id 20
 ```
 
 #### Quitar restricción
 ```bash
-firewall unrestrict {"vlan_id": 20}
+firewall unrestrict --vlan_id 20
 ```
 
 
@@ -218,7 +240,7 @@ El aislamiento bloquea completamente el acceso a Internet desde una VLAN.
 
 #### Aislar VLAN (sin acceso a internet)
 ```bash
-firewall aislar {"vlan_id": 20}
+firewall aislar --vlan_id 20
 ```
 
 **Funcionamiento:**
@@ -229,7 +251,7 @@ firewall aislar {"vlan_id": 20}
 
 #### Desaislar VLAN (restaurar acceso)
 ```bash
-firewall desaislar {"vlan_id": 20}
+firewall desaislar --vlan_id 20
 ```
 
 **Funcionamiento:**
@@ -268,12 +290,12 @@ dmz restart
 
 #### Añadir destino DMZ
 ```bash
-dmz config {"ip": "192.168.3.10", "port": 80, "protocol": "tcp"}
+dmz config --ip 192.168.3.10 --port 80 --protocol tcp
 ```
 
 #### Eliminar destino DMZ
 ```bash
-dmz eliminar {"ip": "192.168.3.10", "port": 80, "protocol": "tcp"}
+dmz eliminar --ip 192.168.3.10 --port 80 --protocol tcp
 ```
 
 ### Aislamiento de hosts DMZ
@@ -282,7 +304,7 @@ El aislamiento de un host DMZ lo bloquea COMPLETAMENTE (bidireccional).
 
 #### Aislar host DMZ
 ```bash
-dmz aislar {"ip": "10.0.5.50"}
+dmz aislar --ip 10.0.5.50
 ```
 
 **Funcionamiento:**
@@ -296,7 +318,7 @@ dmz aislar {"ip": "10.0.5.50"}
 
 #### Desaislar host DMZ
 ```bash
-dmz desaislar {"ip": "10.0.5.50"}
+dmz desaislar --ip 10.0.5.50
 ```
 
 **Funcionamiento:**
@@ -335,17 +357,17 @@ vlans restart
 
 #### Añadir VLAN
 ```bash
-vlans config {"action": "add", "id": 10, "name": "Oficina", "ip_interface": "192.168.10.1/24", "ip_network": "192.168.10.0/24"}
+vlans config --action add --id 10 --name Oficina --ip_interface 192.168.10.1/24 --ip_network 192.168.10.0/24
 ```
 
 #### Eliminar VLAN
 ```bash
-vlans config {"action": "remove", "id": 10}
+vlans config --action remove --id 10
 ```
 
 #### Mostrar configuración
 ```bash
-vlans config {"action": "show"}
+vlans config --action show
 ```
 
 ---
@@ -380,22 +402,22 @@ tagging restart
 
 #### Añadir interfaz con VLAN UNTAG
 ```bash
-tagging config {"action": "add", "name": "eth1", "vlan_untag": "10", "vlan_tag": ""}
+tagging config --action add --name eth1 --vlan_untag 10
 ```
 
 #### Añadir interfaz con VLANs TAG
 ```bash
-tagging config {"action": "add", "name": "eth2", "vlan_untag": "", "vlan_tag": "10,20,30"}
+tagging config --action add --name eth2 --vlan_tag 10,20,30
 ```
 
 #### Eliminar interfaz
 ```bash
-tagging config {"action": "remove", "name": "eth1"}
+tagging config --action remove --name eth1
 ```
 
 #### Mostrar configuración
 ```bash
-tagging config {"action": "show"}
+tagging config --action show
 ```
 
 **NOTA**: Una interfaz NO puede estar UNTAGGED en una VLAN Y TAGGED en otras simultáneamente.
@@ -405,7 +427,100 @@ tagging config {"action": "show"}
 
 ---
 
-## 💡 Ejemplos de Sesión
+## � Módulo EBTABLES
+
+PVLAN (Private VLAN) y MAC Whitelist para control granular de acceso en capa 2.
+
+### Comandos básicos
+
+#### Ver estado
+```bash
+ebtables status
+```
+
+#### Iniciar ebtables
+```bash
+ebtables start
+```
+
+#### Detener ebtables
+```bash
+ebtables stop
+```
+
+#### Reiniciar ebtables
+```bash
+ebtables restart
+```
+
+### Aislamiento PVLAN
+
+#### Aislar VLAN (activar PVLAN)
+```bash
+ebtables aislar --vlan_id 2
+```
+
+**Funcionamiento:**
+- Solo permite comunicación con WAN
+- Bloquea tráfico entre hosts de la misma VLAN
+- Implementado a nivel de capa 2 (ebtables)
+
+#### Desaislar VLAN (desactivar PVLAN)
+```bash
+ebtables desaislar --vlan_id 2
+```
+
+### MAC Whitelist (VLAN 1 únicamente)
+
+La VLAN 1 (Admin) dispone de un sistema de whitelist de direcciones MAC para control granular.
+
+#### Agregar MAC a whitelist
+```bash
+ebtables add_mac --mac AA:BB:CC:DD:EE:FF
+```
+
+#### Eliminar MAC de whitelist
+```bash
+ebtables remove_mac --mac AA:BB:CC:DD:EE:FF
+```
+
+#### Habilitar whitelist
+```bash
+ebtables enable_whitelist
+```
+
+**Nota:** La whitelist está habilitada por defecto en VLAN 1. Cuando está activa, solo las MACs en la lista pueden comunicarse.
+
+#### Deshabilitar whitelist
+```bash
+ebtables disable_whitelist
+```
+
+**Advertencia:** Al deshabilitar, todas las MACs pueden comunicarse libremente.
+
+#### Mostrar whitelist
+```bash
+ebtables show_whitelist
+```
+
+**Ejemplos de uso:**
+```bash
+# Agregar MAC de administrador
+ebtables add_mac --mac 00:11:22:33:44:55
+
+# Verificar lista
+ebtables show_whitelist
+
+# Temporal: deshabilitar para permitir acceso temporal
+ebtables disable_whitelist
+
+# Volver a habilitar
+ebtables enable_whitelist
+```
+
+---
+
+## �💡 Ejemplos de Sesión
 
 ### Sesión completa
 
@@ -423,7 +538,7 @@ Password: password123
 Escribe 'help' para ver los comandos disponibles.
 Escribe 'exit' o 'quit' para salir.
 
-jsbach@admin> vlans config {"action": "add", "id": 10, "name": "Oficina", "ip_interface": "192.168.10.1/24", "ip_network": "192.168.10.0/24"}
+jsbach@admin> vlans config --action add --id 10 --name Oficina --ip_interface 192.168.10.1/24 --ip_network 192.168.10.0/24
 
 ✅ ÉXITO
 ============================================================
@@ -437,11 +552,26 @@ jsbach@admin> vlans start
 VLANs iniciadas
 ============================================================
 
-jsbach@admin> firewall enable_whitelist {"vlan_id": 10, "whitelist": ["8.8.8.8", "1.1.1.1"]}
+jsbach@admin> firewall enable_whitelist --vlan_id 10
 
 ✅ ÉXITO
 ============================================================
 Whitelist habilitada en VLAN 10
+============================================================
+
+jsbach@admin> firewall add_rule --vlan_id 10 --rule 8.8.8.8
+
+✅ ÉXITO
+============================================================
+Regla 8.8.8.8 agregada a VLAN 10
+============================================================
+
+jsbach@admin> ebtables add_mac --mac AA:BB:CC:DD:EE:FF
+
+✅ ÉXITO
+============================================================
+MAC AA:BB:CC:DD:EE:FF agregada a la whitelist
+Total de MACs: 1
 ============================================================
 
 jsbach@admin> exit

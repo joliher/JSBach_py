@@ -1,99 +1,76 @@
 """
-Authentication helper functions for JSBach V4.0
-Used by both web login and CLI authentication
+Funciones auxiliares de autenticación para JSBach V4.0
+Usadas tanto por el login web como por la autenticación de la CLI
 """
 
 import hashlib
 import json
 import os
 from typing import Optional, Tuple
-
+from datetime import datetime
 
 def hash_password(password: str) -> str:
     """
-    Hash a password using SHA256.
-    
+    Hashea una contraseña usando SHA256.
     Args:
-        password: Plain text password
-    
+        password: Contraseña en texto plano
     Returns:
-        Hashed password in format "sha256:hash"
+        Contraseña hasheada en formato "sha256:hash"
     """
     hash_obj = hashlib.sha256(password.encode('utf-8'))
     return f"sha256:{hash_obj.hexdigest()}"
 
-
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """
-    Verify a plain password against a hashed password.
-    
+    Verifica una contraseña en texto plano contra una contraseña hasheada.
     Args:
-        plain_password: Plain text password to verify
-        hashed_password: Hashed password in format "sha256:hash"
-    
+        plain_password: Contraseña en texto plano a verificar
+        hashed_password: Contraseña hasheada en formato "sha256:hash"
     Returns:
-        True if passwords match, False otherwise
+        True si las contraseñas coinciden, False en caso contrario
     """
     return hash_password(plain_password) == hashed_password
 
-
 def load_users(config_path: str) -> dict:
     """
-    Load users from cli_users.json file.
-    
+    Carga usuarios desde un archivo de configuración JSON.
     Args:
-        config_path: Path to cli_users.json
-    
+        config_path: Ruta al archivo JSON de configuración
     Returns:
-        Dictionary with users data, or empty dict if file doesn't exist
+        Diccionario con los usuarios
     """
     if not os.path.exists(config_path):
         return {"users": []}
-    
-    try:
-        with open(config_path, 'r') as f:
-            return json.load(f)
-    except Exception:
-        return {"users": []}
-
+    with open(config_path, 'r', encoding='utf-8') as f:
+        return json.load(f)
 
 def authenticate_user(username: str, password: str, config_path: str) -> Tuple[bool, Optional[dict]]:
     """
-    Authenticate a user against cli_users.json.
-    
+    Autentica un usuario contra el archivo de configuración.
     Args:
-        username: Username to authenticate
-        password: Plain text password
-        config_path: Path to cli_users.json
-    
+        username: Usuario
+        password: Contraseña
+        config_path: Ruta al archivo de configuración
     Returns:
-        Tuple of (success: bool, user_data: dict or None)
+        (True, user_data) si autenticado, (False, None) en caso contrario
     """
-    users_data = load_users(config_path)
-    
-    for user in users_data.get("users", []):
-        if user.get("username") == username and user.get("enabled", True):
-            # Verify password
-            if verify_password(password, user.get("password_hash", "")):
+    users = load_users(config_path).get("users", [])
+    for user in users:
+        if user["username"] == username and user.get("enabled", True):
+            if verify_password(password, user["password_hash"]):
                 return True, user
-    
     return False, None
-
 
 def create_user(username: str, password: str, role: str = "admin") -> dict:
     """
-    Create a user dictionary with hashed password.
-    
+    Crea un nuevo diccionario de usuario.
     Args:
-        username: Username
-        password: Plain text password
-        role: User role (default: admin)
-    
+        username: Usuario
+        password: Contraseña
+        role: Rol del usuario
     Returns:
-        User dictionary
+        Diccionario de usuario
     """
-    from datetime import datetime
-    
     return {
         "username": username,
         "password_hash": hash_password(password),
