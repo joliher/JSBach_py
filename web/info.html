@@ -1,12 +1,14 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JSBach - Información</title>
-    
+
     <link rel="stylesheet" href="/web/00-css/info.css">
 </head>
+
 <body>
     <div class="info-container">
         <h1>🎼 JSBach Router Management System</h1>
@@ -14,66 +16,79 @@
         <div class="section">
             <h2>📋 Descripción General</h2>
             <p>
-                <strong>JSBach</strong> es un sistema de gestión y configuración de router desarrollado con 
-                <strong>Python</strong>, <strong>FastAPI</strong> y <strong>Uvicorn</strong>. 
-                Permite administrar de forma centralizada todos los aspectos de la conectividad de red, 
+                <strong>JSBach</strong> es un sistema de gestión y configuración de router desarrollado con
+                <strong>Python</strong>, <strong>FastAPI</strong> y <strong>Uvicorn</strong>.
+                Permite administrar de forma centralizada todos los aspectos de la conectividad de red,
                 incluyendo interfaces WAN, NAT, VLANs, Firewall y etiquetado de paquetes.
             </p>
         </div>
 
         <div class="info-box">
-            <strong>ℹ️ Objetivo del Proyecto:</strong> Proporcionar una interfaz web intuitiva y moderna para 
-            configurar y monitorizar servicios de red en sistemas Linux, eliminando la necesidad de configuración 
+            <strong>ℹ️ Objetivo del Proyecto:</strong> Proporcionar una interfaz web intuitiva y moderna para
+            configurar y monitorizar servicios de red en sistemas Linux, eliminando la necesidad de configuración
             manual mediante línea de comandos.
         </div>
 
         <h2>🎯 Módulos Disponibles</h2>
-        
+
         <div class="module-grid">
             <div class="module-card">
                 <div class="module-icon">🌐</div>
                 <div class="module-name">WAN</div>
                 <div class="module-desc">Gestión de reglas de iptables por VLAN</div>
             </div>
-            
+
             <div class="module-card">
                 <div class="module-icon">🔄</div>
                 <div class="module-name">NAT</div>
                 <div class="module-desc">Network Address Translation y enrutamiento</div>
             </div>
-            
+
             <div class="module-card">
                 <div class="module-icon">🔥</div>
                 <div class="module-name">FIREWALL</div>
                 <div class="module-desc">Gestión de reglas de iptables por VLAN</div>
             </div>
-            
+
             <div class="module-card">
                 <div class="module-icon">🏷️</div>
                 <div class="module-name">VLANs</div>
                 <div class="module-desc">Configuración de redes virtuales</div>
             </div>
-            
+
             <div class="module-card">
                 <div class="module-icon">🏷️</div>
                 <div class="module-name">TAGGING</div>
                 <div class="module-desc">Etiquetado de paquetes y priorización</div>
             </div>
-            
+
             <div class="module-card">
                 <div class="module-icon">📡</div>
                 <div class="module-name">DMZ</div>
                 <div class="module-desc">Zona desmilitarizada y port forwarding</div>
             </div>
+
+            <div class="module-card">
+                <div class="module-icon">🛡️</div>
+                <div class="module-name">EBTABLES</div>
+                <div class="module-desc">Filtrado MAC y aislamiento de Capa 2</div>
+            </div>
+
+            <div class="module-card">
+                <div class="module-icon">🎹</div>
+                <div class="module-name">EXPECT</div>
+                <div class="module-desc">Orquestación de switches y automatización</div>
+            </div>
         </div>
 
         <div class="info-box">
-            <strong>Botón RESTRINGIR:</strong> bloquea el acceso al router desde la VLAN elegida. VLAN 1 y 2 se bloquean por completo; el resto solo permite DHCP, DNS e ICMP.
+            <strong>Botón RESTRINGIR:</strong> bloquea el acceso al router desde la VLAN elegida. VLAN 1 y 2 se bloquean
+            por completo; el resto solo permite DHCP, DNS e ICMP.
         </div>
 
         <div class="section">
             <h2>🏗️ Arquitectura del Sistema</h2>
-            
+
             <h3>Backend (Python/FastAPI)</h3>
             <ul>
                 <li><code>/app/core/</code> - Módulos funcionales (wan, nat, firewall, vlans, tagging)</li>
@@ -114,8 +129,8 @@
         </div>
 
         <div class="info-box">
-            <strong>💡 Consejo:</strong> Los archivos de configuración pueden editarse manualmente, 
-            pero se recomienda usar la interfaz web para evitar errores de sintaxis. 
+            <strong>💡 Consejo:</strong> Los archivos de configuración pueden editarse manualmente,
+            pero se recomienda usar la interfaz web para evitar errores de sintaxis.
             Siempre haz copias de seguridad antes de realizar cambios importantes.
         </div>
 
@@ -126,4 +141,5 @@
         </div>
     </div>
 </body>
+
 </html>

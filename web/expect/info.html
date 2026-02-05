@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Expect - Ayuda</title>
+    <link rel="stylesheet" href="/web/00-css/global.css">
+    <link rel="stylesheet" href="/web/00-css/info.css">
+</head>
+<body>
+    <div class="info-container">
+        <h1>📖 Guía de Orquestación JSBach</h1>
+        <p>El módulo <strong>Expect</strong> permite centralizar la administración de dispositivos remotos mediante el uso de perfiles de hardware y scripts interactivos.</p>
+
+        <div class="section">
+            <h3>💡 Uso de Bloques</h3>
+            <p>Para configurar múltiples parámetros o interfaces en una sola ejecución, use el separador <code>/</code>.</p>
+            <div class="info-box" style="background: #e9ecef; font-family: monospace; color: #333;">
+                ports:1-4,vlan:10 / ports:5-8,mode:trunk / hostname:Switch01
+            </div>
+        </div>
+
+        <div class="section">
+            <h3>🔑 Gestión de Credenciales</h3>
+            <p>Por seguridad, JSBach no almacena contraseñas genéricas. Debe registrar las credenciales para cada IP usando el botón <strong>Gestionar Acceso</strong> en la sección de configuración.</p>
+        </div>
+
+        <div class="section">
+            <h3>🛡️ Modo Simulación</h3>
+            <p>Active <strong>Dry-run</strong> para preprocesar los comandos y ver el script exacto que se enviaría al switch sin llegar a ejecutarlo físicamente.</p>
+        </div>
+
+        <div class="version-info">
+            JSBach V4.0 - Módulo Expect
+        </div>
+    </div>
+</body>
+</html>

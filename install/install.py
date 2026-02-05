@@ -143,10 +143,11 @@ def install_dependencies():
     # - python3, python3-pip, python3-venv: entorno Python
     # - iptables: reglas de firewall, NAT, DMZ
     # - iproute2: comandos ip y bridge para VLANs y routing
-    # - ebtables: filtrado L2 para aislamiento de VLANs
+    # - expect: orquestación de periféricos remotos
+    # - netcat-openbsd: conexión por red (nc)
     commands = [
         "apt update -qq",
-        "apt install -y python3 python3-pip python3-venv iptables iproute2 ebtables -qq"
+        "apt install -y python3 python3-pip python3-venv iptables iproute2 ebtables expect netcat-openbsd -qq"
     ]
     for c in commands:
         cmd(c)
@@ -473,6 +474,8 @@ if __name__ == "__main__":
         "/usr/sbin/iptables *",
         "/usr/sbin/bridge *",
         "/usr/sbin/ebtables *",
+        "/usr/bin/expect *",
+        "/usr/bin/ping *",
         "/usr/sbin/sysctl -w net.ipv4.ip_forward=1",
         "/usr/sbin/sysctl -w net.ipv4.ip_forward=0",
         "/usr/sbin/sysctl -n net.ipv4.ip_forward"

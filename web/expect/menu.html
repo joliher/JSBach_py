@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Expect - Menú</title>
+    <link rel="stylesheet" href="/web/00-css/expect/menu.css">
+    <script src="/web/00-js/expect/menu.js"></script>
+</head>
+
+<body>
+    <h3>🛠️ EXPECT</h3>
+    <div class="status-box orquestador" id="module-status">Módulo: Orquestador</div>
+    <button type="button" id="btnConfig" onclick="runExpect(event, 'config', this)">⚙️ CONFIGURAR</button>
+    <button type="button" id="btnSecurity" onclick="runSecurity(event, this)">🛡️ PORT SECURITY</button>
+    <hr>
+    <button type="button" id="btnInfo" onclick="openInfo(event, this)">ℹ️ VER INFO</button>
+</body>
+
+</html>

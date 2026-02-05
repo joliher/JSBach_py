@@ -4,7 +4,6 @@ body {
     margin: 0;
     padding: 0;
 }
-
 .container {
     width: 80%;
     margin: 30px auto;
@@ -13,52 +12,44 @@ body {
     border-radius: 8px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
-
 h3 {
     text-align: center;
     margin-bottom: 20px;
     color: #333;
 }
-
 table {
     width: 100%;
     border-collapse: collapse;
 }
-
 table, th, td {
     border: 1px solid #ddd;
 }
-
 th, td {
     padding: 12px;
     text-align: center;
 }
-
 th {
     background-color: #f1f1f1;
     font-size: 16px;
 }
-
 td {
     font-size: 14px;
 }
-
 .status {
     font-weight: bold;
 }
-
 .activo {
     color: #28a745;
 }
-
 .inactivo {
     color: #dc3545;
 }
-
 .desconocido {
     color: #ffc107;
 }
-
+.fijo {
+    color: #007bff;
+}
 .stop-all-btn {
     background-color: #dc3545;
     color: white;
@@ -71,16 +62,13 @@ td {
     display: block;
     transition: background-color 0.3s;
 }
-
 .stop-all-btn:hover {
     background-color: #c82333;
 }
-
 .stop-all-btn:disabled {
     background-color: #6c757d;
     cursor: not-allowed;
 }
-
 #stop-message {
     text-align: center;
     margin-top: 15px;
@@ -88,13 +76,11 @@ td {
     border-radius: 6px;
     display: none;
 }
-
 .success-msg {
     background-color: #d4edda;
     color: #155724;
     border: 1px solid #c3e6cb;
 }
-
 .error-msg {
     background-color: #f8d7da;
     color: #721c24;

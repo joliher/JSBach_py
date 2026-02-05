@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Seguridad de Puertos - Expect</title>
+    <link rel="stylesheet" href="/web/00-css/expect/config.css">
+    <script src="/web/00-js/expect/security.js"></script>
+    <style>
+        .security-block {
+            background: #fff;
+            border: 1px solid #e1e4e8;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            position: relative;
+        }
+
+        .security-block:hover {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-color: #3498db;
+        }
+
+        .remove-block-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: #e74c3c;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            width: 30px;
+            height: 30px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .remove-block-btn:hover {
+            background: #c0392b;
+        }
+
+        .nav-links {
+            margin-bottom: 20px;
+        }
+
+        .nav-links a {
+            text-decoration: none;
+            color: #3498db;
+            font-weight: 500;
+        }
+
+        .nav-links a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <div class="nav-links">
+            <a href="/web/expect/config.html">← Volver a Configuración General</a>
+        </div>
+
+        <h2>🛡️ Port Security (Whitelists)</h2>
+
+        <div class="info-box">
+            <strong>ℹ️ Información:</strong> Implemente seguridad física restringiendo el acceso por puerto a
+            direcciones MAC específicas.
+        </div>
+
+        <form id="security-form">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div class="form-group">
+                    <label>Dirección IP o Alias</label>
+                    <input type="text" name="ip" id="target-ip" placeholder="192.168.1.10" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Perfil de Hardware</label>
+                    <select name="profile" id="profile">
+                        <option value="cisco_ios">Cisco IOS Standard</option>
+                        <option value="tp_link">TP-LINK JetStream</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-top: 10px;">
+                <label style="margin: 0; cursor: pointer;">
+                    <input type="checkbox" name="dry_run" id="dry_run" checked
+                        style="width: 18px; height: 18px; vertical-align: middle;">
+                    Modo Simulación (Dry-run) - Recomendado verificar primero
+                </label>
+            </div>
+
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 25px 0;">
+
+            <h3>🔒 Reglas de Bloqueo
+                <button type="button" class="btn btn-blue btn-small" onclick="addSecurityBlock()">➕ Añadir
+                    Regla</button>
+            </h3>
+
+            <div id="security-blocks-container">
+                <!-- Se llenará dinámicamente -->
+            </div>
+
+            <div class="button-group" style="margin-top: 30px;">
+                <button type="submit" class="btn btn-green">🚀 Aplicar Seguridad</button>
+            </div>
+        </form>
+
+        <div id="output" class="output-box" style="display: none;"></div>
+    </div>
+</body>
+
+</html>

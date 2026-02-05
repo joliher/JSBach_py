@@ -11,7 +11,7 @@ from app.utils import global_functions as gf
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-ALLOWED_MODULES = ["wan", "nat", "firewall", "vlans", "tagging", "dmz", "ebtables"]
+ALLOWED_MODULES = ["wan", "nat", "firewall", "vlans", "tagging", "dmz", "ebtables", "expect"]
 
 # Config directory for JSBach_V4.0
 BASE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
@@ -36,8 +36,10 @@ def get_status_from_config(module_name: str) -> str:
         "nat": os.path.join(CONFIG_DIR, "nat", "nat.json"),
         "firewall": os.path.join(CONFIG_DIR, "firewall", "firewall.json"),
         "vlans": os.path.join(CONFIG_DIR, "vlans", "vlans.json"),
+        "tagging": os.path.join(CONFIG_DIR, "tagging", "tagging.json"),
         "dmz": os.path.join(CONFIG_DIR, "dmz", "dmz.json"),
-        "ebtables": os.path.join(CONFIG_DIR, "ebtables", "ebtables.json")
+        "ebtables": os.path.join(CONFIG_DIR, "ebtables", "ebtables.json"),
+        "expect": os.path.join(CONFIG_DIR, "expect", "expect.json")
     }
 
     config_file = config_paths.get(module_name)
@@ -95,7 +97,8 @@ async def get_module_info(module_name: str, _: None = Depends(require_login)):
         "vlans": os.path.join(CONFIG_DIR, "vlans", "vlans.json"),
         "tagging": os.path.join(CONFIG_DIR, "tagging", "tagging.json"),
         "dmz": os.path.join(CONFIG_DIR, "dmz", "dmz.json"),
-        "ebtables": os.path.join(CONFIG_DIR, "ebtables", "ebtables.json")
+        "ebtables": os.path.join(CONFIG_DIR, "ebtables", "ebtables.json"),
+        "expect": os.path.join(CONFIG_DIR, "expect", "expect.json")
     }
     
     config_file = config_paths.get(module_name)
@@ -202,3 +205,17 @@ async def admin_module(module_name: str, req: ModuleRequest, _: None = Depends(r
     if not success:
         raise HTTPException(status_code=400, detail=message)
     return {"success": success, "message": message}
+
+
+@router.get("/expect/profiles/{profile_id}")
+async def get_expect_profile(profile_id: str, _: None = Depends(require_login)):
+    """Obtiene los parámetros soportados por un perfil de expect."""
+    profile_path = os.path.join(CONFIG_DIR, "expect", "profiles", f"{profile_id}.json")
+    if not os.path.exists(profile_path):
+        raise HTTPException(status_code=404, detail="Perfil no encontrado")
+    
+    try:
+        with open(profile_path, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

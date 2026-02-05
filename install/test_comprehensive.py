@@ -348,6 +348,55 @@ def main():
     runner.test("ebtables", "aislar sin dependencias", "aislar",
                 {"vlan_id": 1}, expect_success=False)
     
+    # =========================================================================
+    # MÓDULO: EXPECT (Fase 5 - Automatización)
+    # =========================================================================
+    print("\n" + "=" * 70)
+    print("📦 MÓDULO: EXPECT (Fase 5 - Automatización)")
+    print("=" * 70)
+
+    # Happy Path
+    print("\n✅ Happy Path (funcionalidad normal):")
+    runner.test("expect", "status", "status", {}, expect_success=True)
+    
+    # Auth config (necesario para tests posteriores)
+    runner.test("expect", "auth configuration", "auth", 
+                {"ip": "192.168.1.1", "user": "test", "password": "password"}, expect_success=True)
+    
+    # Soft Reset (dry-run)
+    runner.test("expect", "reset (dry-run)", "reset", 
+                {"ip": "192.168.1.1", "profile": "tp_link", "dry_run": True}, expect_success=True)
+
+    # Port Security (dry-run)
+    runner.test("expect", "port-security single (dry-run)", "port-security", 
+                {"ip": "192.168.1.1", "ports": "1", "macs": "AA:BB:CC:DD:EE:FF", "dry_run": True}, 
+                expect_success=True)
+                
+    runner.test("expect", "port-security range (dry-run)", "port-security", 
+                {"ip": "192.168.1.1", "ports": "1,3-5", "macs": "AA:BB:CC:DD:EE:FF 11:22:33:44:55:66", "dry_run": True}, 
+                expect_success=True)
+
+    # Validación de parámetros - Config
+    print("\n❌ Validación de parámetros (General/Config):")
+    runner.test("expect", "config sin IP", "config", 
+                {"actions": "hostname:Switch1"}, expect_success=False)
+    runner.test("expect", "config sin actions", "config", 
+                {"ip": "192.168.1.1"}, expect_success=False)
+
+    # Validación de parámetros - Port Security (Strict)
+    print("\n❌ Validación de parámetros (Port Security):")
+    runner.test("expect", "port-security ports con espacios", "port-security", 
+                {"ip": "1.1.1.1", "ports": "1, 2", "macs": "AA:BB:CC:DD:EE:FF", "dry_run": True}, 
+                expect_success=False)
+                
+    runner.test("expect", "port-security MAC inválida", "port-security", 
+                {"ip": "1.1.1.1", "ports": "1", "macs": "ZZ:ZZ:ZZ:ZZ:ZZ:ZZ", "dry_run": True}, 
+                expect_success=False)
+                
+    runner.test("expect", "port-security sin MACs", "port-security", 
+                {"ip": "1.1.1.1", "ports": "1", "dry_run": True}, 
+                expect_success=False)
+    
     # Imprimir resumen
     runner.print_summary()
     

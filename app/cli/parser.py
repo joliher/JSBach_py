@@ -12,7 +12,7 @@ class CommandParser:
     """Parsea y valida los comandos de la CLI"""
     
     # Módulos disponibles
-    MODULES = ['wan', 'nat', 'firewall', 'dmz', 'vlans', 'tagging', 'ebtables']
+    MODULES = ['wan', 'nat', 'firewall', 'dmz', 'vlans', 'tagging', 'ebtables', 'expect']
     
     # Acciones comunes
     COMMON_ACTIONS = ['start', 'stop', 'restart', 'status', 'config']
@@ -21,6 +21,7 @@ class CommandParser:
     MODULE_ACTIONS = {
         'firewall': ['enable_whitelist', 'disable_whitelist', 'add_rule', 'remove_rule', 'aislar', 'desaislar', 'restrict', 'unrestrict'],
         'dmz': ['add_destination', 'remove_destination', 'isolate_dmz_host', 'unisolate_dmz_host', 'aislar', 'desaislar', 'eliminar'],
+        'expect': ['auth', 'profile-mod', 'reset', 'port-security'],
     }
     
     def parse(self, command_line: str) -> Dict:

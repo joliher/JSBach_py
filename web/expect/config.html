@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Configuración Remota - Expect</title>
+    <link rel="stylesheet" href="/web/00-css/expect/config.css">
+    <script src="/web/00-js/expect/config.js"></script>
+</head>
+
+<body>
+    <div class="container">
+        <h2>🛠️ Orquestación Remota (Expect)</h2>
+
+        <div class="info-box">
+            <strong>ℹ️ Información:</strong> Configure los parámetros globales y específicos de sus dispositivos
+            remotos. Las opciones se cargarán dinámicamente según el perfil seleccionado.
+        </div>
+
+        <form id="expect-form">
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div class="form-group">
+                    <label>Dirección IP o Alias</label>
+                    <input type="text" name="ip" id="target-ip" placeholder="192.168.1.10" required>
+                </div>
+
+                <div class="form-group">
+                    <label>Perfil de Hardware</label>
+                    <select name="profile" id="profile" onchange="loadProfileParams()">
+                        <option value="cisco_ios">Cisco IOS Standard</option>
+                        <option value="tp_link">TP-LINK JetStream</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- BLOQUE GLOBAL -->
+            <h3 style="margin-bottom: 10px;">🌍 Configuración Global</h3>
+            <div id="global-config-container" class="config-block" style="min-height: 50px; display: none;">
+                <!-- Se llenará dinámicamente -->
+            </div>
+            <div class="add-param-container" style="margin-bottom: 25px; margin-left: 5px;">
+                <button type="button" class="btn btn-blue btn-small" onclick="showParamMenu(this, 'global')">➕
+                    Añadir Parámetro Global</button>
+                <div class="param-menu"></div>
+            </div>
+
+            <!-- BLOQUES ESPECÍFICOS -->
+            <h3>🔌 Configuración de Interfaces
+                <button type="button" class="btn btn-blue btn-small" onclick="addInterfaceBlock()">➕ Añadir Bloque de
+                    Puertos</button>
+            </h3>
+            <div id="interface-config-container">
+                <!-- Se llenará dinámicamente -->
+            </div>
+
+            <div class="form-group" style="margin-top: 30px; display: flex; align-items: center; gap: 25px;">
+                <label style="margin: 0; cursor: pointer;">
+                    <input type="checkbox" name="auth_required" id="auth_required" checked
+                        style="width: 18px; height: 18px; vertical-align: middle;">
+                    Requiere Autenticación
+                </label>
+                <label style="margin: 0; cursor: pointer;">
+                    <input type="checkbox" name="dry_run" id="dry_run"
+                        style="width: 18px; height: 18px; vertical-align: middle;">
+                    Modo Simulación (Dry-run)
+                </label>
+            </div>
+
+            <div id="auth-warning-box" class="auth-warning hidden">
+                <span>⚠️</span>
+                <strong>Aviso:</strong> La autenticación está activa. Asegúrese de haber configurado las credenciales
+                usando el botón "Gestionar Acceso" si es la primera vez para este dispositivo.
+            </div>
+
+            <div class="button-group">
+                <button type="submit" class="btn btn-green">🚀 Ejecutar Orquestación</button>
+                <button type="button" class="btn btn-blue" onclick="openAuth()">🔑 Gestionar Acceso</button>
+            </div>
+
+            <!-- ZONA DE PELIGRO -->
+            <div style="margin-top: 40px; border-top: 1px solid #e74c3c; padding-top: 20px;">
+                <h4 style="color: #c0392b; margin-top: 0;">Zona de Peligro</h4>
+                <p style="color: #7f8c8d; font-size: 0.9em;">
+                    Las acciones en esta zona son destructivas. Proceda con precaución.
+                </p>
+                <button type="button" class="btn"
+                    style="background-color: #e74c3c; color: white; width: 100%; margin-top: 10px;"
+                    onclick="handleSoftReset()">
+                    ⚠️ SOFT RESET (Restaurar interfaces a fábrica)
+                </button>
+            </div>
+        </form>
+
+        <div id="output" class="output-box" style="display: none;"></div>
+    </div>
+
+    <!-- Modal para Auth -->
+    <div id="modal-overlay" onclick="closeAuth()"></div>
+    <div id="auth-modal">
+        <h3>🔑 Credenciales para <span id="modal-target-ip" style="color: #3498db;">...</span></h3>
+        <p style="font-size: 12px; color: #7f8c8d; margin-bottom: 20px;">Configure el acceso privilegiado para el
+            dispositivo indicado.</p>
+
+        <div class="form-group">
+            <label>Usuario</label>
+            <input type="text" id="auth-user" placeholder="admin">
+        </div>
+
+        <div class="form-group">
+            <label>Contraseña</label>
+            <input type="password" id="auth-pass" placeholder="••••••••">
+        </div>
+
+        <div class="button-group" style="margin-top: 20px;">
+            <button onclick="saveAuth()" class="btn btn-green">Guardar</button>
+            <button onclick="closeAuth()" class="btn btn-blue" style="background: #95a5a6;">Cerrar</button>
+        </div>
+    </div>
+</body>
+
+</html>
